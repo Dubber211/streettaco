@@ -1,4 +1,4 @@
-const CACHE_NAME = "streettaco-v1";
+const CACHE_NAME = "streettaco-v2";
 const PRECACHE_URLS = ["/", "/index.html"];
 
 self.addEventListener("install", (e) => {
