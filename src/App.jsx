@@ -25,7 +25,16 @@ const STORAGE_KEYS = {
   addHistory: "street-taco-add-history",
   myTruckIds: "street-taco-my-trucks",
   onboarding: "street-taco-onboarding-done",
+  theme: "street-taco-theme",
+  favorites: "street-taco-favorites",
+  confirmHistory: "street-taco-confirm-history",
+  reportHistory: "street-taco-report-history",
 };
+
+const MAX_NAME_LENGTH = 40;
+const MAX_FOOD_LENGTH = 30;
+const CONFIRM_COOLDOWN_MINUTES = 30;
+const REPORT_COOLDOWN_MINUTES = 30;
 
 const nowIso = () => new Date().toISOString();
 
@@ -269,6 +278,25 @@ const css = `
     --radius-lg: 22px;
     --font-display: 'Syne', sans-serif;
     --font-body: 'DM Sans', sans-serif;
+    --popup-bg: #1e293b;
+    --popup-text: #f1f5f9;
+    --popup-muted: #94a3b8;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface2: #f1f5f9;
+    --surface3: #e2e8f0;
+    --border: rgba(0,0,0,0.08);
+    --border-accent: rgba(6,182,212,0.3);
+    --text: #0f172a;
+    --text-muted: #475569;
+    --text-dim: #94a3b8;
+    --cyan-glow: rgba(6,182,212,0.2);
+    --popup-bg: #ffffff;
+    --popup-text: #0f172a;
+    --popup-muted: #475569;
   }
 
   body {
@@ -284,7 +312,7 @@ const css = `
   .app-shell {
     max-width: 1100px;
     margin: 0 auto;
-    padding: 28px 18px 48px;
+    padding: 28px 32px 48px;
   }
 
   /* ── Header ── */
@@ -331,6 +359,19 @@ const css = `
     margin-top: 4px;
     font-weight: 500;
   }
+
+  .btn-theme-toggle {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn-theme-toggle:hover { background: var(--surface3); border-color: var(--cyan); }
 
   .btn-add-truck {
     display: flex;
@@ -688,6 +729,17 @@ const css = `
 
   .map-wrapper.add-mode-active { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-glow), 0 8px 32px rgba(0,0,0,0.4); }
 
+  .map-add-truck-overlay {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
   .add-mode-overlay {
     position: absolute;
     top: 14px; left: 50%;
@@ -713,17 +765,17 @@ const css = `
 
   /* ── Leaflet popup overrides ── */
   .leaflet-popup-content-wrapper {
-    background: #1c1e22 !important;
-    border: 1px solid rgba(6,182,212,0.25) !important;
+    background: var(--surface2) !important;
+    border: 1px solid var(--border-accent) !important;
     border-radius: 14px !important;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3) !important;
     padding: 0 !important;
     overflow: hidden !important;
   }
 
   .leaflet-popup-content { margin: 0 !important; }
-  .leaflet-popup-tip { background: #1c1e22 !important; }
-  .leaflet-popup-close-button { color: #94a3b8 !important; top: 10px !important; right: 10px !important; font-size: 16px !important; }
+  .leaflet-popup-tip { background: var(--surface2) !important; }
+  .leaflet-popup-close-button { color: var(--text-muted) !important; top: 10px !important; right: 10px !important; font-size: 16px !important; }
 
   /* ── Popup card ── */
   .popup-card { padding: 14px 16px; min-width: 210px; font-family: var(--font-body); }
@@ -739,8 +791,8 @@ const css = `
     flex-shrink: 0;
   }
 
-  .popup-name { font-family: var(--font-display); font-size: 1rem; font-weight: 800; color: #f1f5f9; }
-  .popup-type { font-size: 0.8rem; color: #94a3b8; margin-top: 2px; }
+  .popup-name { font-family: var(--font-display); font-size: 1rem; font-weight: 800; color: var(--popup-text); }
+  .popup-type { font-size: 0.8rem; color: var(--popup-muted); margin-top: 2px; }
 
   .popup-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 
@@ -758,31 +810,33 @@ const css = `
   .badge-mobile { background: rgba(6,182,212,0.12); color: #22d3ee; border: 1px solid rgba(6,182,212,0.2); }
   .badge-nearby { background: rgba(34,197,94,0.1); color: #86efac; border: 1px solid rgba(34,197,94,0.15); }
 
-  .popup-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 12px; }
+  .popup-meta { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 12px; }
   .popup-meta span { margin-right: 10px; }
 
-  .popup-actions { display: flex; gap: 7px; flex-wrap: wrap; }
-  .popup-section-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 5px; }
+  .popup-top-comment { margin-bottom: 10px; font-size: 0.905rem; color: var(--popup-muted); line-height: 1.4; }
+
+  .popup-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+  .popup-section-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
 
   .btn-vote {
     flex: 1;
-    min-width: 64px;
+    min-width: 0;
     border: none;
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 0.8rem;
-    font-weight: 700;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
     cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 5px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
     transition: opacity 0.15s, transform 0.1s;
   }
 
-  .btn-vote:hover:not(:disabled) { transform: scale(1.05); }
+  .btn-vote:hover:not(:disabled) { transform: scale(1.04); }
   .btn-vote:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-vote-up { background: rgba(34,197,94,0.18); color: #4ade80; }
-  .btn-vote-up.voted { background: rgba(34,197,94,0.35); }
-  .btn-vote-down { background: rgba(239,68,68,0.18); color: #f87171; }
-  .btn-vote-down.voted { background: rgba(239,68,68,0.35); }
+  .btn-vote-up { background: rgba(34,197,94,0.14); color: #4ade80; }
+  .btn-vote-up.voted { background: rgba(34,197,94,0.3); }
+  .btn-vote-down { background: rgba(239,68,68,0.14); color: #f87171; }
+  .btn-vote-down.voted { background: rgba(239,68,68,0.3); }
 
   .btn-still-here {
     width: 100%;
@@ -916,10 +970,43 @@ const css = `
 
   .icon-btn:hover:not(:disabled) { transform: scale(1.1); }
   .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .icon-btn-up { background: rgba(34,197,94,0.14); color: #4ade80; }
-  .icon-btn-up.voted { background: rgba(34,197,94,0.3); }
-  .icon-btn-down { background: rgba(239,68,68,0.14); color: #f87171; }
-  .icon-btn-down.voted { background: rgba(239,68,68,0.3); }
+  .icon-btn-vote { background: rgba(148,163,184,0.14); color: #94a3b8; position: relative; }
+  .icon-btn-vote.voted-up { background: rgba(34,197,94,0.25); color: #4ade80; }
+  .icon-btn-vote.voted-down { background: rgba(239,68,68,0.25); color: #f87171; }
+
+  .vote-popup {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    z-index: 100;
+    animation: fade-in 0.15s ease;
+  }
+
+  @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .vote-popup-btn {
+    width: 42px; height: 42px;
+    border: none;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.15s;
+  }
+  .vote-popup-btn:hover:not(:disabled) { transform: scale(1.12); }
+  .vote-popup-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .vote-popup-up { background: rgba(34,197,94,0.18); color: #4ade80; }
+  .vote-popup-up:hover:not(:disabled) { background: rgba(34,197,94,0.35); }
+  .vote-popup-down { background: rgba(239,68,68,0.18); color: #f87171; }
+  .vote-popup-down:hover:not(:disabled) { background: rgba(239,68,68,0.35); }
+  .icon-btn-status { background: rgba(59,130,246,0.14); color: #93c5fd; position: relative; }
   .icon-btn-pin { background: rgba(59,130,246,0.14); color: #93c5fd; }
   .icon-btn-del { background: rgba(239,68,68,0.14); color: #f87171; }
   .icon-btn-del:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
@@ -927,6 +1014,9 @@ const css = `
   .icon-btn-edit:hover:not(:disabled) { background: rgba(6,182,212,0.28); }
   .icon-btn-close { background: rgba(239,68,68,0.14); color: #f87171; font-size: 13px; }
   .icon-btn-close:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
+  .icon-btn-fav { background: rgba(148,163,184,0.14); color: #94a3b8; }
+  .icon-btn-fav.favorited { background: rgba(239,68,68,0.15); color: #f87171; }
+  .icon-btn-fav:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
 
   /* ── Inline edit form ── */
   .truck-card-edit {
@@ -1086,6 +1176,7 @@ const css = `
     .toast { white-space: normal; text-align: center; max-width: 280px; }
     .onboarding-card { padding: 28px 20px 22px; }
     .onboarding-title { font-size: 1.2rem; }
+    .onboarding-tooltip { max-width: 280px; padding: 18px 16px 16px; }
     .truck-comments { padding: 10px 14px 12px; }
   }
 
@@ -1135,6 +1226,24 @@ const css = `
     flex-shrink: 0;
   }
   .comment-del:hover { color: #f87171; background: rgba(239,68,68,0.1); }
+
+  .comment-vote-row { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+  .comment-vote-btn {
+    background: none; border: none; cursor: pointer; font-size: 0.72rem; padding: 1px 5px; border-radius: 4px;
+    color: #64748b; transition: color 0.15s, background 0.15s;
+  }
+  .comment-vote-btn:hover { background: rgba(148,163,184,0.12); }
+  .comment-vote-btn.voted-up { color: #4ade80; }
+  .comment-vote-btn.voted-down { color: #f87171; }
+  .comment-vote-count { font-size: 0.72rem; color: #64748b; min-width: 14px; text-align: center; }
+
+  .comment-sort-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+  .comment-sort-btn {
+    background: none; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px;
+    font-size: 0.7rem; color: #94a3b8; cursor: pointer; transition: all 0.15s;
+  }
+  .comment-sort-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+  .comment-sort-btn.active { background: rgba(6,182,212,0.15); border-color: var(--cyan); color: var(--cyan); }
 
   .comments-empty { font-size: 0.82rem; color: var(--text-dim); text-align: center; padding: 10px 0; }
 
@@ -1187,10 +1296,12 @@ const css = `
     align-items: center;
     justify-content: center;
     padding: 20px;
-    animation: fade-in 0.25s ease;
+    overflow-y: auto;
+    animation: ob-fade-in 0.25s ease;
   }
 
-  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ob-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ob-slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
   .onboarding-card {
     background: var(--surface);
@@ -1199,23 +1310,25 @@ const css = `
     padding: 36px 32px 28px;
     max-width: 420px;
     width: 100%;
+    margin: auto;
     box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(6,182,212,0.1);
     text-align: center;
-    animation: slide-up 0.3s ease;
+    animation: ob-slide-up 0.3s ease;
   }
-
-  @keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
   .onboarding-icon { font-size: 3rem; margin-bottom: 14px; line-height: 1; }
   .onboarding-title { font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; color: var(--text); margin-bottom: 10px; }
+  .onboarding-subtitle { font-size: 1rem; color: var(--cyan); font-weight: 600; margin-bottom: 6px; }
   .onboarding-body { font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 28px; }
 
   .onboarding-dots { display: flex; justify-content: center; gap: 7px; margin-bottom: 22px; }
   .onboarding-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border); transition: background 0.2s, border-color 0.2s; }
   .onboarding-dot.active { background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 6px var(--cyan-glow); }
 
+  .onboarding-btn-row { display: flex; gap: 10px; }
+
   .btn-onboarding-next {
-    width: 100%;
+    flex: 1;
     background: linear-gradient(135deg, var(--cyan), var(--cyan-dark));
     color: #fff;
     border: none;
@@ -1227,9 +1340,22 @@ const css = `
     cursor: pointer;
     box-shadow: 0 6px 20px var(--cyan-glow);
     transition: transform 0.15s, box-shadow 0.15s;
-    margin-bottom: 12px;
   }
   .btn-onboarding-next:hover { transform: translateY(-2px); box-shadow: 0 10px 28px var(--cyan-glow); }
+
+  .btn-onboarding-back {
+    background: var(--surface3);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-onboarding-back:hover { background: var(--surface2); }
 
   .btn-onboarding-skip {
     background: none;
@@ -1240,38 +1366,165 @@ const css = `
     padding: 4px 8px;
     border-radius: 6px;
     transition: color 0.15s;
+    margin-top: 12px;
   }
   .btn-onboarding-skip:hover { color: var(--text-muted); }
+
+  /* Spotlight mode — tooltip positioned near highlighted element */
+  .onboarding-spotlight {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: none;
+    animation: ob-fade-in 0.25s ease;
+  }
+
+  .onboarding-spotlight-bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: auto;
+  }
+
+  .onboarding-highlight {
+    position: fixed;
+    border-radius: 12px;
+    box-shadow: 0 0 0 4000px rgba(0,0,0,0.72), 0 0 0 4px rgba(6,182,212,0.5);
+    transition: all 0.35s ease;
+    pointer-events: none;
+  }
+
+  .onboarding-tooltip {
+    position: fixed;
+    background: var(--surface);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-lg);
+    padding: 24px 22px 20px;
+    max-width: 320px;
+    width: calc(100vw - 40px);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(6,182,212,0.1);
+    pointer-events: auto;
+    animation: ob-fade-in 0.2s ease;
+    z-index: 10001;
+  }
+
+  .onboarding-tooltip .onboarding-icon { font-size: 2rem; margin-bottom: 8px; }
+  .onboarding-tooltip .onboarding-title { font-size: 1.15rem; margin-bottom: 6px; }
+  .onboarding-tooltip .onboarding-body { font-size: 0.85rem; margin-bottom: 18px; }
 `;
 
 /* ─── Inject Styles ─────────────────────────────────────────────────────────── */
 /* ─── Onboarding Overlay ────────────────────────────────────────────────────── */
 const ONBOARDING_STEPS = [
-  { icon: "🗺️", title: "Find trucks near you",    body: "The map shows food trucks in your area. Drag it, zoom in, or enter a city or ZIP code." },
-  { icon: "📍", title: "Add a truck you spotted",  body: "Hit \"Add Truck\", drop a pin on the map, fill in the details, and save. You're helping the whole community." },
-  { icon: "👍", title: "Vote & confirm trucks",     body: "Upvote trucks that are here, downvote ones that left. Hit \"Still Here\" to reset the expiry timer." },
+  { type: "modal", icon: "🚚", title: "Welcome to StreetTaco", body: "Find the best food trucks near you, powered by people like you. Let's show you around — it only takes a sec." },
+  { type: "spotlight", icon: "🗺️", title: "Your map", body: "This is where food trucks show up. Drag to explore, pinch to zoom, or search for a city.", target: ".map-wrapper", position: "bottom" },
+  { type: "spotlight", icon: "📍", title: "Spot a truck?", body: "Tap this to drop a pin and share a food truck you found with the community.", target: ".map-add-truck-overlay", position: "bottom-left" },
+  { type: "spotlight", icon: "🔍", title: "Find your area", body: "Use your location or type in a city/ZIP to jump to the right spot on the map.", target: ".controls-bar", position: "bottom" },
+  { type: "spotlight", icon: "🗳️", title: "Vote & comment", body: "Each truck card shows votes, comments, and status. Tap to interact.", target: ".list-section", position: "top" },
+  { type: "modal", icon: "🌮", title: "You're all set!", body: "Start exploring, add trucks you find, and help your community eat well." },
 ];
 
 function OnboardingOverlay({ onDismiss }) {
   const [step, setStep] = useState(0);
-  const { icon, title, body } = ONBOARDING_STEPS[step];
+  const current = ONBOARDING_STEPS[step];
   const isLast = step === ONBOARDING_STEPS.length - 1;
+  const isFirst = step === 0;
+  const totalSteps = ONBOARDING_STEPS.length;
 
+  const [targetRect, setTargetRect] = useState(null);
+
+  useEffect(() => {
+    const cur = ONBOARDING_STEPS[step];
+    function measure() {
+      if (cur.type === "spotlight" && cur.target) {
+        const el = document.querySelector(cur.target);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          setTargetRect({ top: rect.top - 8, left: rect.left - 8, width: rect.width + 16, height: rect.height + 16 });
+        } else {
+          setTargetRect(null);
+        }
+      } else {
+        setTargetRect(null);
+      }
+    }
+    measure();
+    if (cur.type === "spotlight" && cur.target) {
+      const el = document.querySelector(cur.target);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
+  }, [step]);
+
+  function getTooltipStyle() {
+    if (!targetRect) return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
+    const pad = 16;
+    const maxW = Math.min(320, window.innerWidth - 40);
+    const belowTop = targetRect.top + targetRect.height + pad;
+    const spaceBelow = window.innerHeight - belowTop;
+    const spaceAbove = targetRect.top - pad;
+    // Center horizontally relative to the highlight, clamped to viewport
+    let left = targetRect.left + targetRect.width / 2 - maxW / 2;
+    left = Math.max(20, Math.min(left, window.innerWidth - maxW - 20));
+
+    if (spaceBelow >= 200) {
+      return { top: belowTop, left, maxWidth: maxW };
+    }
+    if (spaceAbove >= 200) {
+      return { bottom: window.innerHeight - targetRect.top + pad, left, maxWidth: maxW };
+    }
+    // Fallback: center on screen
+    return { top: "50%", left: "50%", transform: "translate(-50%, -50%)", maxWidth: maxW };
+  }
+
+  // Modal steps (welcome & finish)
+  if (current.type === "modal") {
+    return (
+      <div className="onboarding-backdrop">
+        <div className="onboarding-card">
+          <div className="onboarding-icon">{current.icon}</div>
+          <div className="onboarding-title">{current.title}</div>
+          <div className="onboarding-body">{current.body}</div>
+          <div className="onboarding-dots">
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <div key={i} className={`onboarding-dot ${i === step ? "active" : ""}`} />
+            ))}
+          </div>
+          <div className="onboarding-btn-row">
+            {!isFirst && <button className="btn-onboarding-back" onClick={() => setStep(s => s - 1)}>Back</button>}
+            <button className="btn-onboarding-next" onClick={() => isLast ? onDismiss() : setStep(s => s + 1)}>
+              {isLast ? "Let's go!" : isFirst ? "Show me around" : "Next"}
+            </button>
+          </div>
+          <button className="btn-onboarding-skip" onClick={onDismiss}>Skip</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Spotlight steps
   return (
-    <div className="onboarding-backdrop">
-      <div className="onboarding-card">
-        <div className="onboarding-icon">{icon}</div>
-        <div className="onboarding-title">{title}</div>
-        <div className="onboarding-body">{body}</div>
+    <div className="onboarding-spotlight">
+      <div className="onboarding-spotlight-bg" onClick={() => setStep(s => s + 1)} />
+      {targetRect && (
+        <div className="onboarding-highlight" style={{ top: targetRect.top, left: targetRect.left, width: targetRect.width, height: targetRect.height }} />
+      )}
+      <div className="onboarding-tooltip" style={getTooltipStyle()}>
+        <div className="onboarding-icon">{current.icon}</div>
+        <div className="onboarding-title">{current.title}</div>
+        <div className="onboarding-body">{current.body}</div>
         <div className="onboarding-dots">
-          {ONBOARDING_STEPS.map((_, i) => (
+          {Array.from({ length: totalSteps }, (_, i) => (
             <div key={i} className={`onboarding-dot ${i === step ? "active" : ""}`} />
           ))}
         </div>
-        <button className="btn-onboarding-next" onClick={() => isLast ? onDismiss() : setStep(s => s + 1)}>
-          {isLast ? "Let's go! 🌮" : "Next"}
-        </button>
-        <br />
+        <div className="onboarding-btn-row">
+          <button className="btn-onboarding-back" onClick={() => setStep(s => s - 1)}>Back</button>
+          <button className="btn-onboarding-next" onClick={() => isLast ? onDismiss() : setStep(s => s + 1)}>
+            {isLast ? "Let's go!" : "Next"}
+          </button>
+        </div>
         <button className="btn-onboarding-skip" onClick={onDismiss}>Skip</button>
       </div>
     </div>
@@ -1284,7 +1537,7 @@ function StyleInjector() {
 }
 
 /* ─── Header ────────────────────────────────────────────────────────────────── */
-function Header({ onStartAddTruck, canAdd, addsRemaining }) {
+function Header({ theme, onToggleTheme }) {
   return (
     <div className="header">
       <div className="header-logo">
@@ -1294,14 +1547,9 @@ function Header({ onStartAddTruck, canAdd, addsRemaining }) {
           <p>Find food trucks near you • Community powered</p>
         </div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-        <button className="btn-add-truck" onClick={onStartAddTruck} disabled={!canAdd} style={!canAdd ? { opacity: 0.5, cursor: "not-allowed", boxShadow: "none" } : {}}>
-          <span style={{ fontSize: "1.1em" }}>+</span> {canAdd ? "Add Truck" : "Limit Reached"}
-        </button>
-        {canAdd && addsRemaining <= 2 && (
-          <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{addsRemaining} add{addsRemaining !== 1 ? "s" : ""} left today</span>
-        )}
-      </div>
+      <button className="btn-theme-toggle" onClick={onToggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+        {theme === "dark" ? "☀️" : "🌙"}
+      </button>
     </div>
   );
 }
@@ -1369,8 +1617,8 @@ function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, new
 
       <div className="add-form">
         <div className="form-row">
-          <input className="add-input" type="text" placeholder="🚚  Truck name…" value={newTruckName} onChange={e => setNewTruckName(e.target.value)} />
-          <input className="add-input" type="text" placeholder="🍔  Food type…" value={newTruckFood} onChange={e => setNewTruckFood(e.target.value)} />
+          <input className="add-input" type="text" placeholder="🚚  Truck name…" value={newTruckName} maxLength={MAX_NAME_LENGTH} onChange={e => setNewTruckName(e.target.value)} />
+          <input className="add-input" type="text" placeholder="🍔  Food type…" value={newTruckFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setNewTruckFood(e.target.value)} />
         </div>
 
         <div className="form-row">
@@ -1413,18 +1661,32 @@ function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, new
 }
 
 /* ─── Map ───────────────────────────────────────────────────────────────────── */
-function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, onConfirmStillHere, onReportClosed, userVotes, userLocation, focusRequest, onBoundsChange }) {
+const TILE_DARK = "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png";
+const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
+function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme }) {
   const pendingIcon = useMemo(() => makePendingIcon(), []);
   const markerRefs = useRef({});
   const skipFitRef = useRef(false);
 
   return (
     <div className={`map-wrapper ${addMode ? "add-mode-active" : ""}`}>
+      {!addMode && (
+        <div className="map-add-truck-overlay">
+          <button className="btn-add-truck" onClick={onStartAddTruck} disabled={!canAdd} style={!canAdd ? { opacity: 0.5, cursor: "not-allowed", boxShadow: "none" } : {}}>
+            <span style={{ fontSize: "1.1em" }}>+</span> {canAdd ? "Add Truck" : "Limit Reached"}
+          </button>
+          {canAdd && addsRemaining <= 2 && (
+            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{addsRemaining} add{addsRemaining !== 1 ? "s" : ""} left today</span>
+          )}
+        </div>
+      )}
       {addMode && <div className="add-mode-overlay">📍 Tap the map to drop a pin</div>}
       <MapContainer center={mapCenter} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          key={theme}
+          attribution='&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url={theme === "light" ? TILE_LIGHT : TILE_DARK}
         />
         <FitBoundsToRadius center={mapCenter} radiusMiles={radiusMiles} skipRef={skipFitRef} />
         <MapBoundsTracker onBoundsChange={onBoundsChange} />
@@ -1459,7 +1721,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
                     <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
                     <div>
                       <div className="popup-name">{truck.name}</div>
-                      <div className="popup-type">{truck.foodType}</div>
+                      <div className="popup-type">{truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}</div>
                     </div>
                   </div>
                   <div className="popup-badges">
@@ -1473,6 +1735,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
                     {truck.isPermanent && truck.hours && <span>⏰ {truck.hours}</span>}
                     {!truck.isPermanent && <span>📍 confirmed {timeAgo(truck.lastConfirmedAt)}</span>}
                   </div>
+                  <PopupTopComment truckId={truck.id} />
                   <div className="popup-section-label">Rate the food</div>
                   <div className="popup-actions">
                     <button className={`btn-vote btn-vote-up ${up ? "voted" : ""}`} onClick={() => onVote(truck.id, 1)} disabled={up}>
@@ -1481,19 +1744,6 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
                     <button className={`btn-vote btn-vote-down ${down ? "voted" : ""}`} onClick={() => onVote(truck.id, -1)} disabled={down}>
                       👎 {down ? "Noted" : "Not great"}
                     </button>
-                  </div>
-                  <div className="popup-section-label" style={{ marginTop: 8 }}>Is it here right now?</div>
-                  <div className="popup-actions">
-                    {!truck.isPermanent && (
-                      <button className="btn-vote btn-vote-up" onClick={() => onConfirmStillHere(truck.id)}>
-                        ✅ Still here
-                      </button>
-                    )}
-                    {truck.open && (
-                      <button className="btn-vote btn-vote-down" onClick={() => onReportClosed(truck.id)}>
-                        🚫 It's closed
-                      </button>
-                    )}
                   </div>
                 </div>
               </Popup>
@@ -1517,47 +1767,101 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
 }
 
 /* ─── Truck List ────────────────────────────────────────────────────────────── */
-/* ─── Truck Comments ────────────────────────────────────────────────────────── */
-function TruckComments({ truckId, userId }) {
-  const [comments, setComments] = useState([]);
-  const [loadState, setLoadState] = useState("loading");
-  const [draft, setDraft] = useState("");
-  const [posting, setPosting] = useState(false);
+/* ─── Popup Top Comment ────────────────────────────────────────────────────── */
+function PopupTopComment({ truckId }) {
+  const [topComment, setTopComment] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     supabase
       .from("comments")
-      .select("id, body, created_at, user_id")
+      .select("body, votes")
       .eq("truck_id", truckId)
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) { setLoadState("error"); return; }
-        setComments(data);
-        setLoadState("done");
+      .order("votes", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (!cancelled && data?.length) setTopComment(data[0]);
       });
     return () => { cancelled = true; };
   }, [truckId]);
 
+  if (!topComment) return null;
+  return (
+    <div className="popup-top-comment">
+      "{topComment.body}" &nbsp;👍 {topComment.votes}
+    </div>
+  );
+}
+
+/* ─── Truck Comments ────────────────────────────────────────────────────────── */
+function TruckComments({ truckId, userId }) {
+  const [comments, setComments] = useState([]);
+  const [commentVotes, setCommentVotes] = useState({});
+  const [loadState, setLoadState] = useState("loading");
+  const [draft, setDraft] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [sortBy, setSortBy] = useState("top");
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      supabase.from("comments").select("id, body, created_at, user_id, votes").eq("truck_id", truckId).limit(50),
+      userId ? supabase.from("comment_votes").select("comment_id, vote").eq("user_id", userId) : { data: [] },
+    ]).then(([commentsRes, votesRes]) => {
+      if (cancelled) return;
+      if (commentsRes.error) { setLoadState("error"); return; }
+      setComments(commentsRes.data);
+      const voteMap = {};
+      (votesRes.data || []).forEach(v => { voteMap[v.comment_id] = v.vote; });
+      setCommentVotes(voteMap);
+      setLoadState("done");
+    });
+    return () => { cancelled = true; };
+  }, [truckId, userId]);
+
+  const userAlreadyCommented = comments.some(c => c.user_id === userId);
+
   async function handlePost() {
     const body = draft.trim();
-    if (!body || !userId || posting) return;
+    if (!body || !userId || posting || userAlreadyCommented) return;
     setPosting(true);
     const { data, error } = await supabase
       .from("comments")
       .insert({ truck_id: truckId, user_id: userId, body })
       .select()
       .single();
-    if (!error) { setComments(cur => [data, ...cur]); setDraft(""); }
+    if (!error) { setComments(cur => [{ ...data, votes: 0 }, ...cur]); setDraft(""); }
     setPosting(false);
+  }
+
+  async function handleCommentVote(commentId, vote) {
+    const existing = commentVotes[commentId];
+    if (existing === vote) return;
+
+    let delta = vote;
+    if (existing) {
+      await supabase.from("comment_votes").delete().eq("comment_id", commentId).eq("user_id", userId);
+      delta = vote - existing;
+    }
+
+    await supabase.from("comment_votes").insert({ comment_id: commentId, user_id: userId, vote });
+    const newVotes = (comments.find(c => c.id === commentId)?.votes || 0) + delta;
+    await supabase.from("comments").update({ votes: newVotes }).eq("id", commentId);
+    setCommentVotes(v => ({ ...v, [commentId]: vote }));
+    setComments(cur => cur.map(c => c.id === commentId ? { ...c, votes: c.votes + delta } : c));
   }
 
   async function handleDelete(commentId) {
     const { error } = await supabase.from("comments").delete().eq("id", commentId).eq("user_id", userId);
     if (!error) setComments(cur => cur.filter(c => c.id !== commentId));
   }
+
+  const sorted = useMemo(() => {
+    const copy = [...comments];
+    if (sortBy === "top") copy.sort((a, b) => b.votes - a.votes);
+    else copy.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return copy;
+  }, [comments, sortBy]);
 
   const nearLimit = draft.length > 240;
 
@@ -1567,15 +1871,26 @@ function TruckComments({ truckId, userId }) {
       {loadState === "error"   && <div className="comments-empty">Couldn't load comments.</div>}
       {loadState === "done" && (
         <>
+          {comments.length > 1 && (
+            <div className="comment-sort-row">
+              <button className={`comment-sort-btn ${sortBy === "top" ? "active" : ""}`} onClick={() => setSortBy("top")}>Top</button>
+              <button className={`comment-sort-btn ${sortBy === "new" ? "active" : ""}`} onClick={() => setSortBy("new")}>New</button>
+            </div>
+          )}
           {comments.length === 0
             ? <div className="comments-empty">No comments yet. Be the first!</div>
             : (
               <div className="comments-list">
-                {comments.map(c => (
+                {sorted.map(c => (
                   <div className="comment-row" key={c.id}>
                     <div style={{ flex: 1 }}>
                       <div className="comment-body">{c.body}</div>
-                      <div className="comment-meta">{timeAgo(c.created_at)}</div>
+                      <div className="comment-vote-row">
+                        <button className={`comment-vote-btn ${commentVotes[c.id] === 1 ? "voted-up" : ""}`} onClick={() => handleCommentVote(c.id, 1)}>▲</button>
+                        <span className="comment-vote-count">{c.votes}</span>
+                        <button className={`comment-vote-btn ${commentVotes[c.id] === -1 ? "voted-down" : ""}`} onClick={() => handleCommentVote(c.id, -1)}>▼</button>
+                        <span className="comment-meta" style={{ marginLeft: 6 }}>{timeAgo(c.created_at)}</span>
+                      </div>
                     </div>
                     {c.user_id === userId && (
                       <button className="comment-del" onClick={() => handleDelete(c.id)} title="Delete">✕</button>
@@ -1585,33 +1900,49 @@ function TruckComments({ truckId, userId }) {
               </div>
             )
           }
-          <div className="comment-input-row">
-            <textarea
-              className="comment-textarea"
-              placeholder={userId ? "Add a comment…" : "Connecting…"}
-              value={draft}
-              maxLength={280}
-              disabled={!userId}
-              onChange={e => setDraft(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePost(); } }}
-            />
-            <span className={`comment-char ${nearLimit ? "near-limit" : ""}`}>{draft.length}/280</span>
-            <button className="btn-post-comment" onClick={handlePost} disabled={posting || !draft.trim() || !userId}>
-              {posting ? "…" : "Post"}
-            </button>
-          </div>
+          {userAlreadyCommented
+            ? <div className="comments-empty">You've already commented on this truck.</div>
+            : (
+              <div className="comment-input-row">
+                <textarea
+                  className="comment-textarea"
+                  placeholder={userId ? "Add a comment…" : "Connecting…"}
+                  value={draft}
+                  maxLength={280}
+                  disabled={!userId}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePost(); } }}
+                />
+                <span className={`comment-char ${nearLimit ? "near-limit" : ""}`}>{draft.length}/280</span>
+                <button className="btn-post-comment" onClick={handlePost} disabled={posting || !draft.trim() || !userId}>
+                  {posting ? "…" : "Post"}
+                </button>
+              </div>
+            )
+          }
         </>
       )}
     </div>
   );
 }
 
-function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck }) {
+function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite }) {
   const [showOpenOnly, setShowOpenOnly] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
   const [sortBy, setSortBy] = useState("distance");
   const [editingId, setEditingId] = useState(null);
   const [openCommentsId, setOpenCommentsId] = useState(null);
+  const [openVoteId, setOpenVoteId] = useState(null);
+  const [openStatusId, setOpenStatusId] = useState(null);
+
+  useEffect(() => {
+    if (!openVoteId && !openStatusId) return;
+    function handleClick() { setOpenVoteId(null); setOpenStatusId(null); }
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openVoteId, openStatusId]);
+
   const [editName, setEditName] = useState("");
   const [editFood, setEditFood] = useState("");
   const [editOpen, setEditOpen] = useState(true);
@@ -1639,11 +1970,12 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
 
   const displayed = useMemo(() => {
     let list = visibleTrucks;
+    if (showFavoritesOnly) list = list.filter(t => favorites.includes(t.id));
     if (showOpenOnly) list = list.filter(t => t.open);
     if (activeFoodFilter) list = list.filter(t => t.foodType === activeFoodFilter);
     if (sortBy === "votes") list = [...list].sort((a, b) => b.votes - a.votes);
     return list;
-  }, [visibleTrucks, showOpenOnly, activeFoodFilter, sortBy]);
+  }, [visibleTrucks, showOpenOnly, showFavoritesOnly, favorites, activeFoodFilter, sortBy]);
 
   return (
     <div className="list-section">
@@ -1653,6 +1985,9 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
       </div>
 
       <div className="list-filters">
+        <button className={`filter-btn ${showFavoritesOnly ? "active" : ""}`} onClick={() => setShowFavoritesOnly(v => !v)}>
+          {showFavoritesOnly ? "❤️" : "🤍"} Favorites
+        </button>
         <button className={`filter-btn ${showOpenOnly ? "active" : ""}`} onClick={() => setShowOpenOnly(v => !v)}>
           Open only
         </button>
@@ -1686,8 +2021,8 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
             <div key={truck.id}>
               <div className="truck-card-edit">
                 <div className="form-row">
-                  <input className="add-input" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Truck name…" />
-                  <input className="add-input" value={editFood} onChange={e => setEditFood(e.target.value)} placeholder="Food type…" />
+                  <input className="add-input" value={editName} maxLength={MAX_NAME_LENGTH} onChange={e => setEditName(e.target.value)} placeholder="Truck name…" />
+                  <input className="add-input" value={editFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setEditFood(e.target.value)} placeholder="Food type…" />
                 </div>
                 <label className="checkbox-row">
                   <input type="checkbox" checked={editOpen} onChange={e => setEditOpen(e.target.checked)} />
@@ -1720,28 +2055,50 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                     {truck.isPermanent
                       ? truck.hours ? `📌 ${truck.hours}` : "📌 Permanent"
                       : `🚚 confirmed ${timeAgo(truck.lastConfirmedAt)}`}
+                    &nbsp;&nbsp;
+                    <span className={`score-pill ${truck.votes > 0 ? "positive" : truck.votes < 0 ? "negative" : ""}`}>
+                      {truck.votes > 0 ? "▲" : truck.votes < 0 ? "▼" : "–"} {Math.abs(truck.votes)}
+                    </span>
                   </div>
                 </div>
                 <div className="truck-card-actions">
-                  <span className={`score-pill ${truck.votes > 0 ? "positive" : truck.votes < 0 ? "negative" : ""}`}>
-                    {truck.votes > 0 ? "▲" : truck.votes < 0 ? "▼" : "–"} {Math.abs(truck.votes)}
-                  </span>
-                  <button className={`icon-btn icon-btn-up ${up ? "voted" : ""}`} onClick={e => { e.stopPropagation(); onVote(truck.id, 1); }} disabled={up} title="Upvote">▲</button>
-                  <button className={`icon-btn icon-btn-down ${down ? "voted" : ""}`} onClick={e => { e.stopPropagation(); onVote(truck.id, -1); }} disabled={down} title="Downvote">▼</button>
-                  {!truck.isPermanent && (
-                    <button className="icon-btn icon-btn-pin" onClick={e => { e.stopPropagation(); onConfirmStillHere(truck.id); }} title="Still here">📍</button>
-                  )}
-                  {truck.open && !isMine && (
-                    <button className="icon-btn icon-btn-close" onClick={e => { e.stopPropagation(); onReportClosed(truck.id); }} title="Report closed">🚫</button>
+                  <button className={`icon-btn icon-btn-fav ${favorites.includes(truck.id) ? "favorited" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onToggleFavorite(truck.id); }} title="Favorite">{favorites.includes(truck.id) ? "❤️" : "🤍"}</button>
+                  <div style={{ position: "relative" }}>
+                    <button className={`icon-btn icon-btn-vote ${up ? "voted-up" : down ? "voted-down" : ""}`} onClick={e => { e.stopPropagation(); setOpenStatusId(null); setOpenVoteId(v => v === truck.id ? null : truck.id); }} title="Vote">
+                      {up ? "👍" : down ? "👎" : "🗳️"}
+                    </button>
+                    {openVoteId === truck.id && (
+                      <div className="vote-popup" onClick={e => e.stopPropagation()}>
+                        <button className={`vote-popup-btn vote-popup-up`} onClick={() => { onVote(truck.id, 1); setOpenVoteId(null); }} disabled={up} title="Upvote">👍</button>
+                        <button className={`vote-popup-btn vote-popup-down`} onClick={() => { onVote(truck.id, -1); setOpenVoteId(null); }} disabled={down} title="Downvote">👎</button>
+                      </div>
+                    )}
+                  </div>
+                  {(!truck.isPermanent || (truck.open && !isMine)) && (
+                    <div style={{ position: "relative" }}>
+                      <button className="icon-btn icon-btn-status" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(v => v === truck.id ? null : truck.id); }} title="Update status">
+                        📋
+                      </button>
+                      {openStatusId === truck.id && (
+                        <div className="vote-popup" onClick={e => e.stopPropagation()}>
+                          {!truck.isPermanent && (
+                            <button className="vote-popup-btn vote-popup-up" onClick={() => { onConfirmStillHere(truck.id); setOpenStatusId(null); }} title="Still here">📍</button>
+                          )}
+                          {truck.open && !isMine && (
+                            <button className="vote-popup-btn vote-popup-down" onClick={() => { onReportClosed(truck.id); setOpenStatusId(null); }} title="Report closed">🚫</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                   {isMine && (
-                    <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); startEdit(truck); }} title="Edit">✏️</button>
+                    <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); startEdit(truck); }} title="Edit">✏️</button>
                   )}
                   {isMine && (
-                    <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); onDeleteTruck(truck.id); }} title="Delete">🗑</button>
+                    <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onDeleteTruck(truck.id); }} title="Delete">🗑</button>
                   )}
-                  <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); onShareTruck(truck.id); }} title="Share">🔗</button>
-                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments">💬</button>
+                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments">💬</button>
+                  <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share">🔗</button>
                 </div>
               </div>
               {commentsOpen && <TruckComments truckId={truck.id} userId={userId} />}
@@ -1768,7 +2125,21 @@ function App() {
   }, []);
   const [radiusMiles, setRadiusMiles] = useLocalStorageState(STORAGE_KEYS.radius, DEFAULT_RADIUS_MILES);
   const [addHistory, setAddHistory] = useLocalStorageState(STORAGE_KEYS.addHistory, []);
+  const [confirmHistory, setConfirmHistory] = useLocalStorageState(STORAGE_KEYS.confirmHistory, {});
+  const [reportHistory, setReportHistory] = useLocalStorageState(STORAGE_KEYS.reportHistory, {});
   const [onboardingDone, setOnboardingDone] = useLocalStorageState(STORAGE_KEYS.onboarding, false);
+  const [theme, setTheme] = useLocalStorageState(STORAGE_KEYS.theme, "dark");
+  const [favorites, setFavorites] = useLocalStorageState(STORAGE_KEYS.favorites, []);
+
+  function handleToggleFavorite(id) {
+    setFavorites(cur => cur.includes(id) ? cur.filter(f => f !== id) : [...cur, id]);
+  }
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  function toggleTheme() { setTheme(t => t === "dark" ? "light" : "dark"); }
   const [trucks, setTrucks] = useState([]);
   const [userVotes, setUserVotes] = useState({});
   const [userId, setUserId] = useState(null);
@@ -1874,11 +2245,19 @@ function App() {
   }
 
   async function handleConfirmStillHere(id) {
+    const lastConfirm = confirmHistory[id];
+    if (lastConfirm && (Date.now() - new Date(lastConfirm).getTime()) / 60000 < CONFIRM_COOLDOWN_MINUTES) {
+      showToast("You already confirmed this truck recently. Try again later.");
+      return;
+    }
     const { error } = await supabase.from("trucks")
       .update({ last_confirmed_at: nowIso() })
       .eq("id", id).eq("is_permanent", false);
     if (error) showToast("Couldn't confirm — try again.");
-    else showToast("Truck confirmed as still here ✅");
+    else {
+      setConfirmHistory(h => ({ ...h, [id]: nowIso() }));
+      showToast("Truck confirmed as still here ✅");
+    }
   }
 
   async function handleVote(id, vote) {
@@ -1902,7 +2281,7 @@ function App() {
   async function handleEditTruck(id, updates) {
     const { error } = await supabase.from("trucks")
       .update({ name: updates.name, food_type: updates.foodType, open: updates.open })
-      .eq("id", id);
+      .eq("id", id).eq("user_id", userId);
     if (error) showToast("Couldn't update — try again.");
     else showToast("Truck updated ✅");
   }
@@ -1916,13 +2295,21 @@ function App() {
   }
 
   async function handleReportClosed(id) {
+    const lastReport = reportHistory[id];
+    if (lastReport && (Date.now() - new Date(lastReport).getTime()) / 60000 < REPORT_COOLDOWN_MINUTES) {
+      showToast("You already reported this truck recently. Try again later.");
+      return;
+    }
     const { error } = await supabase.from("trucks").update({ open: false }).eq("id", id);
     if (error) showToast("Couldn't report — try again.");
-    else showToast("Marked as closed. Thanks!");
+    else {
+      setReportHistory(h => ({ ...h, [id]: nowIso() }));
+      showToast("Marked as closed. Thanks!");
+    }
   }
 
   async function handleDeleteTruck(id) {
-    const { error } = await supabase.from("trucks").delete().eq("id", id);
+    const { error } = await supabase.from("trucks").delete().eq("id", id).eq("user_id", userId);
     if (error) showToast("Couldn't delete — try again.");
     else showToast("Truck removed.");
   }
@@ -1938,6 +2325,7 @@ function App() {
     if (!canAdd) { showToast(`Daily limit of ${MAX_TRUCKS_PER_DAY} reached. Try again tomorrow.`); return; }
     if (!pendingPin) { showToast("Drop a pin on the map first."); return; }
     if (!name || !food) { showToast("Enter the truck name and food type."); return; }
+    if (trucks.some(t => t.name.toLowerCase() === name.toLowerCase())) { showToast(`"${name}" already exists!`); return; }
     if (!userId) { showToast("Still connecting — try again in a moment."); return; }
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const ts = nowIso();
@@ -2005,11 +2393,11 @@ function App() {
       <StyleInjector />
       <ToastContainer toasts={toasts} />
       <div className="app-shell">
-        <Header onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} />
+        <Header theme={theme} onToggleTheme={toggleTheme} />
         <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
         <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} />
-        <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} />
-        <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} />
+        <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} />
+        <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} />
       </div>
     </>
   );
