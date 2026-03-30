@@ -200,7 +200,8 @@ function FitBoundsToRadius({ center, radiusMiles, skipRef }) {
     if (initialRef.current) {
       initialRef.current = false;
       // Safari/iOS PWA: container may have 0 height on first render
-      setTimeout(() => { map.invalidateSize(); map.fitBounds(bounds, { animate: false }); }, 100);
+      setTimeout(() => { map.invalidateSize(); map.fitBounds(bounds, { animate: false }); }, 150);
+      setTimeout(() => { map.invalidateSize(); map.fitBounds(bounds, { animate: false }); }, 500);
     } else {
       map.fitBounds(bounds, { animate: true });
     }
