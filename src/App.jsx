@@ -91,6 +91,41 @@ function containsProfanity(text) {
   return words.some(w => BLOCKED_WORDS.includes(w));
 }
 
+/* ─── Schedule Helpers ──────────────────────────────────────────────────────── */
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function parseSchedule(hours) {
+  if (!hours || typeof hours !== "string") return null;
+  try {
+    const s = JSON.parse(hours);
+    if (s && s.open && s.close && Array.isArray(s.days)) return s;
+  } catch {}
+  return null;
+}
+
+function isOpenBySchedule(hours) {
+  const s = parseSchedule(hours);
+  if (!s) return null; // no schedule — use manual open flag
+  const now = new Date();
+  const day = now.getDay();
+  if (!s.days.includes(day)) return false;
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  const [oh, om] = s.open.split(":").map(Number);
+  const [ch, cm] = s.close.split(":").map(Number);
+  const openMins = oh * 60 + (om || 0);
+  const closeMins = ch * 60 + (cm || 0);
+  if (closeMins > openMins) return currentMins >= openMins && currentMins < closeMins;
+  // Overnight: e.g. 22:00 - 02:00
+  return currentMins >= openMins || currentMins < closeMins;
+}
+
+function formatSchedule(hours) {
+  const s = parseSchedule(hours);
+  if (!s) return hours || "";
+  const days = s.days.sort().map(d => DAY_LABELS[d]).join(", ");
+  return `${days} ${s.open}–${s.close}`;
+}
+
 async function reverseGeocode(lat, lng) {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
@@ -314,6 +349,45 @@ function FocusTruck({ trucks, focusRequest, markerRefs }) {
 
 function MapClickHandler({ addMode, onPickLocation }) {
   useMapEvents({ click(e) { if (addMode) onPickLocation([e.latlng.lat, e.latlng.lng]); } });
+  return null;
+}
+
+function ScheduleInput({ value, onChange }) {
+  const schedule = parseSchedule(value) || { open: "09:00", close: "17:00", days: [1, 2, 3, 4, 5] };
+
+  function update(patch) {
+    const updated = { ...schedule, ...patch };
+    onChange(JSON.stringify(updated));
+  }
+
+  function toggleDay(d) {
+    const days = schedule.days.includes(d)
+      ? schedule.days.filter(x => x !== d)
+      : [...schedule.days, d].sort();
+    update({ days });
+  }
+
+  return (
+    <div className="schedule-input">
+      <div className="schedule-days">
+        {DAY_LABELS.map((label, i) => (
+          <button key={i} type="button" className={`schedule-day ${schedule.days.includes(i) ? "active" : ""}`} onClick={() => toggleDay(i)}>{label}</button>
+        ))}
+      </div>
+      <div className="schedule-times">
+        <label className="schedule-time-label">
+          Open <input type="time" value={schedule.open} onChange={e => update({ open: e.target.value })} />
+        </label>
+        <label className="schedule-time-label">
+          Close <input type="time" value={schedule.close} onChange={e => update({ close: e.target.value })} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function AdminMapClick({ onPick }) {
+  useMapEvents({ click(e) { onPick([e.latlng.lat, e.latlng.lng]); } });
   return null;
 }
 
@@ -679,6 +753,48 @@ const css = `
   .step.active .step-label { color: var(--text); }
   .step.done .step-label { color: var(--green); }
 
+  .proximity-prompt {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface1); border: 1px solid var(--cyan); border-radius: 14px;
+    padding: 14px 18px; display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 1000; max-width: 90vw;
+    animation: slideUp 0.3s ease-out;
+  }
+  @keyframes slideUp { from { transform: translateX(-50%) translateY(30px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+  .proximity-prompt-text { font-size: 0.88rem; color: var(--text); flex: 1; }
+  .proximity-prompt-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .proximity-btn { padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; border: none; cursor: pointer; }
+  .proximity-btn.confirm { background: var(--cyan); color: #fff; }
+  .proximity-btn.dismiss { background: var(--surface2); color: var(--text-muted); }
+
+  .schedule-section-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 10px 0 4px; }
+  .schedule-input { margin: 8px 0; }
+  .schedule-days { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  .schedule-day {
+    padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .schedule-day.active { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+  .schedule-times { display: flex; gap: 12px; align-items: center; }
+  .schedule-time-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .schedule-time-label input[type="time"] {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 8px; color: var(--text); font-size: 0.82rem;
+  }
+
+  .btn-use-location {
+    margin-top: 6px;
+    padding: 5px 12px;
+    background: var(--cyan);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
   .add-form { display: grid; gap: 12px; }
 
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -1005,8 +1121,8 @@ const css = `
   .truck-card-emoji.open { background: rgba(6,182,212,0.15); }
   .truck-card-emoji.closed { background: var(--surface2); }
 
-  .truck-card-info { flex: 1; min-width: 0; }
-  .truck-card-name { font-family: var(--font-display); font-size: 0.95rem; font-weight: 700; color: var(--text); }
+  .truck-card-info { flex: 1; min-width: 0; font-family: var(--font-display); }
+  .truck-card-name { font-size: 0.95rem; font-weight: 700; color: var(--text); }
 
   .truck-card-sub {
     font-size: 0.8rem;
@@ -1269,9 +1385,10 @@ const css = `
   /* ── Share / Comment icon buttons ── */
   .icon-btn-share { background: rgba(6,182,212,0.12); color: #22d3ee; }
   .icon-btn-share:hover:not(:disabled) { background: rgba(6,182,212,0.25); }
-  .icon-btn-comment { background: rgba(148,163,184,0.12); color: #94a3b8; }
+  .icon-btn-comment { background: rgba(148,163,184,0.12); color: #94a3b8; position: relative; }
   .icon-btn-comment:hover:not(:disabled) { background: rgba(148,163,184,0.22); }
   .icon-btn-comment.active { background: rgba(6,182,212,0.15); color: var(--cyan); }
+  .comment-count-badge { font-size: 0.65rem; font-weight: 700; margin-left: 2px; }
 
   /* ── Comments ── */
   .truck-comments {
@@ -1424,6 +1541,10 @@ const css = `
   .admin-add-form { padding: 16px 20px; background: var(--surface1); border-bottom: 1px solid var(--border); }
   .admin-add-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 12px; }
   .admin-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .admin-add-location { margin: 12px 0; }
+  .admin-add-location-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+  .admin-pin-status { font-size: 0.82rem; color: var(--cyan); margin-top: 8px; }
+  .admin-add-map-wrapper { height: 250px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); margin: 10px 0; }
 
   .admin-comment-actions { display: flex; gap: 4px; }
 
@@ -1640,17 +1761,28 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
   const [addOpen, setAddOpen] = useState(true);
   const [addPermanent, setAddPermanent] = useState(false);
   const [addHours, setAddHours] = useState("");
-  const [addLat, setAddLat] = useState("");
-  const [addLng, setAddLng] = useState("");
+  const [addPin, setAddPin] = useState(null);
   const [addSaving, setAddSaving] = useState(false);
+  const [addLocLoading, setAddLocLoading] = useState(false);
+
+  function handleAdminUseLocation() {
+    if (!navigator.geolocation) { showToast("Geolocation not supported."); return; }
+    setAddLocLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => { setAddPin([pos.coords.latitude, pos.coords.longitude]); setAddLocLoading(false); showToast("Location set!"); },
+      () => { setAddLocLoading(false); showToast("Couldn't get location."); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   async function handleAdminAdd() {
-    const name = addName.trim(), food = addFood.trim(), lat = parseFloat(addLat), lng = parseFloat(addLng);
+    const name = addName.trim(), food = addFood.trim();
     if (!name || !food) { showToast("Enter truck name and food type."); return; }
-    if (isNaN(lat) || isNaN(lng)) { showToast("Enter valid coordinates."); return; }
+    if (!addPin) { showToast("Set a location first (drop a pin or use your location)."); return; }
     setAddSaving(true);
-    await onAddTruck({ name, food, open: addOpen, isPermanent: addPermanent, hours: addHours.trim(), lat, lng });
-    setAddName(""); setAddFood(""); setAddOpen(true); setAddPermanent(false); setAddHours(""); setAddLat(""); setAddLng("");
+    const scheduleOpen = isOpenBySchedule(addHours);
+    await onAddTruck({ name, food, open: scheduleOpen !== null ? scheduleOpen : true, isPermanent: addPermanent, hours: addHours, lat: addPin[0], lng: addPin[1] });
+    setAddName(""); setAddFood(""); setAddPermanent(false); setAddHours(""); setAddPin(null);
     setAddSaving(false);
     setShowAddForm(false);
   }
@@ -1717,17 +1849,33 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
           <div className="admin-add-grid">
             <input className="add-input" placeholder="Truck name" value={addName} maxLength={MAX_NAME_LENGTH} onChange={e => setAddName(e.target.value)} />
             <input className="add-input" placeholder="Food type" value={addFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setAddFood(e.target.value)} />
-            <input className="add-input" placeholder="Latitude" value={addLat} onChange={e => setAddLat(e.target.value)} />
-            <input className="add-input" placeholder="Longitude" value={addLng} onChange={e => setAddLng(e.target.value)} />
           </div>
-          <div style={{ display: "flex", gap: 16, margin: "10px 0" }}>
-            <label className="checkbox-row"><input type="checkbox" checked={addOpen} onChange={e => setAddOpen(e.target.checked)} /> <span className="checkbox-label">Open</span></label>
-            <label className="checkbox-row"><input type="checkbox" checked={addPermanent} onChange={e => setAddPermanent(e.target.checked)} /> <span className="checkbox-label">Permanent</span></label>
+          <div className="admin-add-location">
+            <div className="admin-add-location-label">Location:</div>
+            <div className="admin-btn-row">
+              <button className="btn-admin-action verify" onClick={handleAdminUseLocation} disabled={addLocLoading}>
+                {addLocLoading ? "Getting location…" : "📍 Use my location"}
+              </button>
+              <button className="btn-admin-action" onClick={() => setAddPin(null)}>Drop pin on map ↓</button>
+            </div>
+            {addPin && <div className="admin-pin-status">✅ Pin at {addPin[0].toFixed(4)}, {addPin[1].toFixed(4)}</div>}
           </div>
-          {addPermanent && <input className="add-input" placeholder="Hours (e.g. Mon-Fri 11-3)" value={addHours} onChange={e => setAddHours(e.target.value)} style={{ marginBottom: 10 }} />}
-          <div className="admin-btn-row">
+          <div className="admin-add-map-wrapper">
+            <MapContainer center={addPin || [41.6764, -86.252]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+              <TileLayer url={TILE_LIGHT} attribution='&copy; <a href="https://carto.com/">CARTO</a>' />
+              <AdminMapClick onPick={pos => { setAddPin(pos); showToast("Pin dropped!"); }} />
+              {addPin && <Marker position={addPin} />}
+            </MapContainer>
+          </div>
+          <label className="checkbox-row" style={{ margin: "10px 0" }}>
+            <input type="checkbox" checked={addPermanent} onChange={e => setAddPermanent(e.target.checked)} />
+            <span className="checkbox-label">📌 Permanent spot</span>
+          </label>
+          <div className="admin-add-location-label">Operating Hours:</div>
+          <ScheduleInput value={addHours} onChange={setAddHours} />
+          <div className="admin-btn-row" style={{ marginTop: 12 }}>
             <button className="btn-admin-action verify" onClick={handleAdminAdd} disabled={addSaving}>{addSaving ? "Saving…" : "Add Truck"}</button>
-            <button className="btn-admin-action" onClick={() => setShowAddForm(false)}>Cancel</button>
+            <button className="btn-admin-action" onClick={() => { setShowAddForm(false); setAddPin(null); }}>Cancel</button>
           </div>
         </div>
       )}
@@ -1833,6 +1981,64 @@ function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ─── Proximity Prompt ─────────────────────────────────────────────────────── */
+const PROXIMITY_KEY = "street-taco-proximity-prompts";
+const PROXIMITY_RADIUS_MILES = 0.5;
+
+function ProximityPrompt({ userLocation, trucks, onConfirm }) {
+  const [prompt, setPrompt] = useState(null);
+  const [dismissed, setDismissed] = useState({});
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(PROXIMITY_KEY) || "{}");
+      setDismissed(stored);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!userLocation || trucks.length === 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const mobileTrucks = trucks.filter(t => !t.isPermanent);
+    for (const truck of mobileTrucks) {
+      const dist = haversineMiles(userLocation, truck.position);
+      if (dist <= PROXIMITY_RADIUS_MILES) {
+        const key = `${truck.id}_${today}`;
+        if (!dismissed[key]) {
+          setPrompt(truck);
+          return;
+        }
+      }
+    }
+    setPrompt(null);
+  }, [userLocation, trucks, dismissed]);
+
+  function markDone(truckId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `${truckId}_${today}`;
+    const updated = { ...dismissed, [key]: true };
+    // Clean old entries
+    Object.keys(updated).forEach(k => { if (!k.endsWith(today)) delete updated[k]; });
+    setDismissed(updated);
+    localStorage.setItem(PROXIMITY_KEY, JSON.stringify(updated));
+    setPrompt(null);
+  }
+
+  if (!prompt) return null;
+
+  return (
+    <div className="proximity-prompt">
+      <div className="proximity-prompt-text">
+        📍 Near <strong>{prompt.name}</strong>? Is it still here?
+      </div>
+      <div className="proximity-prompt-actions">
+        <button className="proximity-btn confirm" onClick={() => { onConfirm(prompt.id); markDone(prompt.id); }}>Still here ✅</button>
+        <button className="proximity-btn dismiss" onClick={() => markDone(prompt.id)}>Dismiss</button>
+      </div>
     </div>
   );
 }
@@ -2047,7 +2253,7 @@ function ToastContainer({ toasts }) {
 }
 
 /* ─── Add Truck Panel (Waze-style) ──────────────────────────────────────────── */
-function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, newTruckFood, setNewTruckFood, newTruckOpen, setNewTruckOpen, newTruckPermanent, setNewTruckPermanent, newTruckHours, setNewTruckHours, onSaveTruck, onCancelAddTruck, canAdd, addsRemaining }) {
+function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, newTruckFood, setNewTruckFood, newTruckOpen, setNewTruckOpen, newTruckPermanent, setNewTruckPermanent, newTruckHours, setNewTruckHours, onSaveTruck, onCancelAddTruck, canAdd, addsRemaining, onUseMyLocation }) {
   if (!addMode) return null;
 
   const step1Done = Boolean(pendingPin);
@@ -2061,7 +2267,8 @@ function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, new
       <div className="add-steps">
         <div className={`step ${step1Done ? "done" : "active"}`}>
           <div className="step-num">{step1Done ? "✓" : "1"}</div>
-          <div className="step-label">{step1Done ? "Pin placed!" : "Tap map to place pin"}</div>
+          <div className="step-label">{step1Done ? "Pin placed!" : "Tap map or use location"}</div>
+          {!step1Done && <button className="btn-use-location" onClick={onUseMyLocation}>📍 Use my location</button>}
         </div>
         <div className={`step ${step2Active ? "active" : ""}`}>
           <div className="step-num">2</div>
@@ -2079,20 +2286,13 @@ function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, new
           <input className="add-input" type="text" placeholder="🍔  Food type…" value={newTruckFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setNewTruckFood(e.target.value)} />
         </div>
 
-        <div className="form-row">
-          <label className="checkbox-row">
-            <input type="checkbox" checked={newTruckOpen} onChange={e => setNewTruckOpen(e.target.checked)} />
-            <span className="checkbox-label">🟢 Open right now</span>
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={newTruckPermanent} onChange={e => setNewTruckPermanent(e.target.checked)} />
-            <span className="checkbox-label">📌 Permanent spot</span>
-          </label>
-        </div>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={newTruckPermanent} onChange={e => setNewTruckPermanent(e.target.checked)} />
+          <span className="checkbox-label">📌 Permanent spot</span>
+        </label>
 
-        {newTruckPermanent && (
-          <input className="add-input" type="text" placeholder="⏰  Hours (e.g. Mon–Fri 11am–7pm)" value={newTruckHours} onChange={e => setNewTruckHours(e.target.value)} />
-        )}
+        <div className="schedule-section-label">⏰ Operating Hours (optional)</div>
+        <ScheduleInput value={newTruckHours} onChange={setNewTruckHours} />
 
         <div className={`pin-status ${pendingPin ? "placed" : "waiting"}`}>
           {pendingPin
@@ -2190,17 +2390,16 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
                   <div className="popup-meta">
                     <span>⭐ {truck.votes} votes</span>
                     <span>📏 {dist.toFixed(1)} mi</span>
-                    {truck.isPermanent && truck.hours && <span>⏰ {truck.hours}</span>}
+                    {truck.hours && <span>⏰ {formatSchedule(truck.hours)}</span>}
                     {!truck.isPermanent && <span>📍 confirmed {timeAgo(truck.lastConfirmedAt)}</span>}
                   </div>
                   <PopupTopComment truckId={truck.id} />
-                  <div className="popup-section-label">Rate the food</div>
                   <div className="popup-actions">
                     <button className={`btn-vote btn-vote-up ${up ? "voted" : ""}`} onClick={() => onVote(truck.id, 1)} disabled={up}>
-                      👍 {up ? "Liked" : "Good"}
+                      😊
                     </button>
                     <button className={`btn-vote btn-vote-down ${down ? "voted" : ""}`} onClick={() => onVote(truck.id, -1)} disabled={down}>
-                      👎 {down ? "Noted" : "Not great"}
+                      😞
                     </button>
                   </div>
                 </div>
@@ -2400,6 +2599,19 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
   const [openCommentsId, setOpenCommentsId] = useState(null);
   const [openVoteId, setOpenVoteId] = useState(null);
   const [openStatusId, setOpenStatusId] = useState(null);
+  const [commentCounts, setCommentCounts] = useState({});
+
+  useEffect(() => {
+    const ids = visibleTrucks.map(t => t.id);
+    if (ids.length === 0) return;
+    supabase.from("comments").select("truck_id").in("truck_id", ids)
+      .then(({ data }) => {
+        if (!data) return;
+        const counts = {};
+        data.forEach(c => { counts[c.truck_id] = (counts[c.truck_id] || 0) + 1; });
+        setCommentCounts(counts);
+      });
+  }, [visibleTrucks]);
 
   useEffect(() => {
     if (!openVoteId && !openStatusId) return;
@@ -2520,7 +2732,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                   </div>
                   <div className="truck-card-hours">
                     {truck.isPermanent
-                      ? truck.hours ? `📌 ${truck.hours}` : "📌 Permanent"
+                      ? truck.hours ? `📌 ${formatSchedule(truck.hours)}` : "📌 Permanent"
                       : `🚚 confirmed ${timeAgo(truck.lastConfirmedAt)}`}
                     &nbsp;&nbsp;
                     <span className={`score-pill ${truck.votes > 0 ? "positive" : truck.votes < 0 ? "negative" : ""}`}>
@@ -2532,7 +2744,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                   <button className={`icon-btn icon-btn-fav ${favorites.includes(truck.id) ? "favorited" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onToggleFavorite(truck.id); }} title="Favorite">{favorites.includes(truck.id) ? "❤️" : "🤍"}</button>
                   <div style={{ position: "relative" }}>
                     <button className={`icon-btn icon-btn-vote ${up ? "voted-up" : down ? "voted-down" : ""}`} onClick={e => { e.stopPropagation(); setOpenStatusId(null); setOpenVoteId(v => v === truck.id ? null : truck.id); }} title="Vote">
-                      {up ? "👍" : down ? "👎" : "🗳️"}
+                      {up ? "😊" : down ? "😞" : "🙂"}
                     </button>
                     {openVoteId === truck.id && (
                       <div className="vote-popup" onClick={e => e.stopPropagation()}>
@@ -2541,30 +2753,13 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                       </div>
                     )}
                   </div>
-                  {(!truck.isPermanent || (truck.open && !isMine)) && (
-                    <div style={{ position: "relative" }}>
-                      <button className="icon-btn icon-btn-status" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(v => v === truck.id ? null : truck.id); }} title="Update status">
-                        📋
-                      </button>
-                      {openStatusId === truck.id && (
-                        <div className="vote-popup" onClick={e => e.stopPropagation()}>
-                          {!truck.isPermanent && (
-                            <button className="vote-popup-btn vote-popup-up" onClick={() => { onConfirmStillHere(truck.id); setOpenStatusId(null); }} title="Still here">📍</button>
-                          )}
-                          {truck.open && !isMine && (
-                            <button className="vote-popup-btn vote-popup-down" onClick={() => { onReportClosed(truck.id); setOpenStatusId(null); }} title="Report closed">🚫</button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                   {isMine && (
                     <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); startEdit(truck); }} title="Edit">✏️</button>
                   )}
                   {isMine && (
                     <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onDeleteTruck(truck.id); }} title="Delete">🗑</button>
                   )}
-                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments">💬</button>
+                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments">💬{commentCounts[truck.id] ? <span className="comment-count-badge">{commentCounts[truck.id]}</span> : null}</button>
                   <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share">🔗</button>
                 </div>
               </div>
@@ -2812,6 +3007,15 @@ function App() {
   function handleStartAddTruck() { setAddMode(true); resetForm(); showToast("Tap the map to drop a pin 📍"); }
   function handleCancelAddTruck() { setAddMode(false); resetForm(); }
   function handlePickLocation(pos) { setPendingPin(pos); showToast("Pin dropped! Fill in the details below."); }
+  function handleUseLocationForPin() {
+    if (!navigator.geolocation) { showToast("Geolocation not supported."); return; }
+    showToast("Getting your location…");
+    navigator.geolocation.getCurrentPosition(
+      pos => { setPendingPin([pos.coords.latitude, pos.coords.longitude]); showToast("Location set! Fill in the details below."); },
+      () => { showToast("Couldn't get location. Try tapping the map instead."); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   async function handleSaveTruck(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -2832,9 +3036,9 @@ function App() {
     const ts = nowIso();
     const geo = await reverseGeocode(pendingPin[0], pendingPin[1]);
     const { error } = await supabase.from("trucks").insert({
-      id, name, food_type: food, open: newTruckOpen, votes: 1,
+      id, name, food_type: food, open: isOpenBySchedule(hours) ?? true, votes: 1,
       lat: pendingPin[0], lng: pendingPin[1],
-      is_permanent: newTruckPermanent, hours: newTruckPermanent ? hours : "",
+      is_permanent: newTruckPermanent, hours: hours || "",
       user_id: userId, created_at: ts, last_confirmed_at: ts,
       ...(geo.street ? { street: geo.street } : {}),
       ...(geo.city ? { city: geo.city } : {}),
@@ -2948,7 +3152,10 @@ function App() {
   }
 
   const activeTrucks = useMemo(() =>
-    trucks.map(normalizeTruck).filter(t => !isTruckExpired(t) && !t.isHidden),
+    trucks.map(normalizeTruck).filter(t => !isTruckExpired(t) && !t.isHidden).map(t => {
+      const scheduleOpen = isOpenBySchedule(t.hours);
+      return scheduleOpen !== null ? { ...t, open: scheduleOpen } : t;
+    }),
     [trucks]
   );
 
@@ -3011,8 +3218,9 @@ function App() {
         <div className="app-shell">
           <Header theme={theme} onToggleTheme={toggleTheme} />
           <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
-          <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} />
+          <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} onUseMyLocation={handleUseLocationForPin} />
           <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} />
+          <ProximityPrompt userLocation={userLocation} trucks={activeTrucks} onConfirm={handleConfirmStillHere} />
           <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} />
         </div>
       )}
