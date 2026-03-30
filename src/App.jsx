@@ -36,6 +36,7 @@ const MAX_NAME_LENGTH = 40;
 const MAX_FOOD_LENGTH = 30;
 const CONFIRM_COOLDOWN_MINUTES = 30;
 const REPORT_COOLDOWN_MINUTES = 30;
+const ADD_COOLDOWN_MINUTES = 15;
 
 const nowIso = () => new Date().toISOString();
 
@@ -1395,6 +1396,10 @@ const css = `
   .admin-comment-body { font-size: 0.85rem; color: var(--text); margin-bottom: 4px; }
   .admin-comment-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px; }
 
+  .admin-add-form { padding: 16px 20px; background: var(--surface1); border-bottom: 1px solid var(--border); }
+  .admin-add-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 12px; }
+  .admin-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
   .admin-comment-actions { display: flex; gap: 4px; }
 
   .verified-badge { font-size: 0.8em; }
@@ -1601,9 +1606,29 @@ function AdminLoginModal({ onLogin, onClose }) {
 }
 
 /* ─── Admin Panel ──────────────────────────────────────────────────────────── */
-function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onLogout, showToast }) {
+function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onAddTruck, onLogout, showToast }) {
   const [filter, setFilter] = useState("all");
   const [expandedTruck, setExpandedTruck] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addFood, setAddFood] = useState("");
+  const [addOpen, setAddOpen] = useState(true);
+  const [addPermanent, setAddPermanent] = useState(false);
+  const [addHours, setAddHours] = useState("");
+  const [addLat, setAddLat] = useState("");
+  const [addLng, setAddLng] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+
+  async function handleAdminAdd() {
+    const name = addName.trim(), food = addFood.trim(), lat = parseFloat(addLat), lng = parseFloat(addLng);
+    if (!name || !food) { showToast("Enter truck name and food type."); return; }
+    if (isNaN(lat) || isNaN(lng)) { showToast("Enter valid coordinates."); return; }
+    setAddSaving(true);
+    await onAddTruck({ name, food, open: addOpen, isPermanent: addPermanent, hours: addHours.trim(), lat, lng });
+    setAddName(""); setAddFood(""); setAddOpen(true); setAddPermanent(false); setAddHours(""); setAddLat(""); setAddLng("");
+    setAddSaving(false);
+    setShowAddForm(false);
+  }
 
   const filtered = useMemo(() => {
     if (filter === "hidden") return trucks.filter(t => t.isHidden);
@@ -1615,8 +1640,32 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
     <div className="admin-panel">
       <div className="admin-bar">
         <span className="admin-bar-title">🔐 Admin Mode</span>
-        <button className="btn-admin-logout" onClick={onLogout}>Logout</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-admin-logout" style={{ background: "var(--cyan)", color: "#fff", borderColor: "var(--cyan)" }} onClick={() => setShowAddForm(f => !f)}>+ Add Truck</button>
+          <button className="btn-admin-logout" onClick={onLogout}>Logout</button>
+        </div>
       </div>
+
+      {showAddForm && (
+        <div className="admin-add-form">
+          <div className="admin-add-title">Add Truck (no limits)</div>
+          <div className="admin-add-grid">
+            <input className="add-input" placeholder="Truck name" value={addName} maxLength={MAX_NAME_LENGTH} onChange={e => setAddName(e.target.value)} />
+            <input className="add-input" placeholder="Food type" value={addFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setAddFood(e.target.value)} />
+            <input className="add-input" placeholder="Latitude" value={addLat} onChange={e => setAddLat(e.target.value)} />
+            <input className="add-input" placeholder="Longitude" value={addLng} onChange={e => setAddLng(e.target.value)} />
+          </div>
+          <div style={{ display: "flex", gap: 16, margin: "10px 0" }}>
+            <label className="checkbox-row"><input type="checkbox" checked={addOpen} onChange={e => setAddOpen(e.target.checked)} /> <span className="checkbox-label">Open</span></label>
+            <label className="checkbox-row"><input type="checkbox" checked={addPermanent} onChange={e => setAddPermanent(e.target.checked)} /> <span className="checkbox-label">Permanent</span></label>
+          </div>
+          {addPermanent && <input className="add-input" placeholder="Hours (e.g. Mon-Fri 11-3)" value={addHours} onChange={e => setAddHours(e.target.value)} style={{ marginBottom: 10 }} />}
+          <div className="admin-btn-row">
+            <button className="btn-admin-action verify" onClick={handleAdminAdd} disabled={addSaving}>{addSaving ? "Saving…" : "Add Truck"}</button>
+            <button className="btn-admin-action" onClick={() => setShowAddForm(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="admin-filters">
         <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
@@ -2686,6 +2735,12 @@ function App() {
     if (e && e.preventDefault) e.preventDefault();
     const name = newTruckName.trim(), food = newTruckFood.trim(), hours = newTruckHours.trim();
     if (!canAdd) { showToast(`Daily limit of ${MAX_TRUCKS_PER_DAY} reached. Try again tomorrow.`); return; }
+    const lastAdd = addHistory.filter(ts => hoursSince(ts) < 24).sort().pop();
+    if (lastAdd && (Date.now() - new Date(lastAdd).getTime()) / 60000 < ADD_COOLDOWN_MINUTES) {
+      const minsLeft = Math.ceil(ADD_COOLDOWN_MINUTES - (Date.now() - new Date(lastAdd).getTime()) / 60000);
+      showToast(`Please wait ${minsLeft} min before adding another truck.`);
+      return;
+    }
     if (!pendingPin) { showToast("Drop a pin on the map first."); return; }
     if (!name || !food) { showToast("Enter the truck name and food type."); return; }
     if (containsProfanity(name) || containsProfanity(food)) { showToast("Please keep truck names and food types clean."); return; }
@@ -2783,6 +2838,20 @@ function App() {
     return !error;
   }
 
+  async function handleAdminAddTruck({ name, food, open, isPermanent, hours, lat, lng }) {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    const ts = nowIso();
+    const street = await reverseGeocodeStreet(lat, lng);
+    const { error } = await supabase.from("trucks").insert({
+      id, name, food_type: food, open, votes: 1,
+      lat, lng, is_permanent: isPermanent, hours: isPermanent ? hours : "",
+      user_id: userId, created_at: ts, last_confirmed_at: ts,
+      ...(street ? { street } : {}),
+    });
+    if (error) { showToast("Failed to add truck."); return; }
+    showToast(`"${name}" added!`);
+  }
+
   async function handleAdminDeleteTruck(id) {
     const { error } = await supabase.from("trucks").delete().eq("id", id);
     if (error) showToast("Failed to delete truck.");
@@ -2848,6 +2917,7 @@ function App() {
           onUnhideComment={handleAdminUnhideComment}
           onDeleteComment={handleAdminDeleteComment}
           onDeleteTruck={handleAdminDeleteTruck}
+          onAddTruck={handleAdminAddTruck}
           onLogout={handleAdminLogout}
           showToast={showToast}
         />
