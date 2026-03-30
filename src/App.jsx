@@ -24,7 +24,7 @@ const STORAGE_KEYS = {
   radius: "street-taco-radius",
   addHistory: "street-taco-add-history",
   myTruckIds: "street-taco-my-trucks",
-  onboarding: "street-taco-onboarding-v2",
+  onboarding: "street-taco-onboarding-v3",
   theme: "street-taco-theme",
   favorites: "street-taco-favorites",
   confirmHistory: "street-taco-confirm-history",
@@ -1777,7 +1777,7 @@ function OnboardingOverlay({ onDismiss }) {
               {isLast ? "Let's go!" : isFirst ? "Show me around" : "Next"}
             </button>
           </div>
-          <button className="btn-onboarding-skip" onClick={() => setStep(eulaStepIndex)}>Skip</button>
+          {step < eulaStepIndex && <button className="btn-onboarding-skip" onClick={() => setStep(eulaStepIndex)}>Skip</button>}
         </div>
       </div>
     );
