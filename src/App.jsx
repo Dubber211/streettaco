@@ -66,6 +66,22 @@ const BLOCKED_WORDS = [
   "testicle","testicles","tit","tits","titties","titty","twat","twats",
   "vagina","viagra","vulva",
   "wang","wank","wanker","whore","whores","wtf",
+  // Drugs
+  "cocaine","coke","crack","crackhead","heroin","heroine","meth","methhead",
+  "amphetamine","amphetamines","molly","ecstasy","mdma","lsd","acid",
+  "shrooms","mushrooms","weed","marijuana","stoner","pothead","blunt","dope",
+  "dopehead","junkie","junkies","oxy","oxycontin","fentanyl","ketamine",
+  "xanax","adderall","percocet","vicodin","codeine","opium","narcotic",
+  "narcotics","druggie","druggies","crackpipe","bong","edibles",
+  // Slurs & hate speech
+  "beaner","beaners","chink","chinks","chinky","coolie","darkie","darkies",
+  "gook","gooks","gringo","gringos","gyp","gypsy","halfbreed",
+  "honkey","honky","injun","jap","japs","kike","kikes",
+  "kraut","krauts","limey","mick","micks","muzzie","nazi","nazis",
+  "paki","pakis","polack","polacks","raghead","ragheads","redskin","redskins",
+  "sambo","skinhead","spaz","sperg","squaw","terrorist","terrorists",
+  "towelhead","towelheads","tranny","trannies","Uncle Tom","wetback","wetbacks",
+  "wigger","wiggers","wop","wops","zipperhead",
 ];
 
 function containsProfanity(text) {
