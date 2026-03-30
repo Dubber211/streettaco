@@ -1772,7 +1772,7 @@ function OnboardingOverlay({ onDismiss }) {
             ))}
           </div>
           <div className="onboarding-btn-row">
-            {!isFirst && <button className="btn-onboarding-back" onClick={() => setStep(s => s - 1)}>Back</button>}
+            {!isFirst && !isLast && <button className="btn-onboarding-back" onClick={() => setStep(s => s - 1)}>Back</button>}
             <button className="btn-onboarding-next" onClick={() => isLast ? onDismiss() : setStep(s => s + 1)}>
               {isLast ? "Let's go!" : isFirst ? "Show me around" : "Next"}
             </button>
@@ -2752,7 +2752,7 @@ function App() {
   return (
     <>
       {showAdminLogin && <AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
-      {!onboardingDone && !adminView && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} />}
+      {!onboardingDone && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} />}
       <StyleInjector />
       <ToastContainer toasts={toasts} />
       {adminView ? (
