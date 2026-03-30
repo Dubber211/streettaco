@@ -39,6 +39,41 @@ const REPORT_COOLDOWN_MINUTES = 30;
 
 const nowIso = () => new Date().toISOString();
 
+/* ─── Profanity Filter ─────────────────────────────────────────────────────── */
+const BLOCKED_WORDS = [
+  "ass","asshole","assholes","bastard","bastards","bitch","bitches","bitchy",
+  "blowjob","blowjobs","boner","boob","boobs","bullshit","butt","butthole",
+  "cock","cocks","cocksucker","coon","coons","cum","cumming","cunt","cunts",
+  "damn","damned","damnit","dick","dicks","dickhead","dildo","dildos",
+  "douche","douchebag","dumbass","dyke",
+  "fag","fags","faggot","faggots","felch","fuck","fucked","fucker","fuckers",
+  "fuckface","fucking","fuckoff","fucks","fuckwit",
+  "goddamn","goddamnit","gringo","handjob",
+  "hell","ho","hoe","hooker","hookers","horny","humping",
+  "jackass","jackoff","jerkoff","jizz",
+  "kike","kinky","kkk",
+  "lmao","lmfao",
+  "meth","milf","mofo","motherfucker","motherfuckers","motherfucking",
+  "negro","nigga","niggas","nigger","niggers","nig","nipple","nipples","nutsack",
+  "orgasm","orgy",
+  "paki","pecker","penis","penises","piss","pissed","pissing","porn","porno",
+  "prostitute","prostitutes","pube","pubes","pubic","pussy","pussies",
+  "queer",
+  "rape","raped","raping","rapist","rectum","retard","retarded","rimjob",
+  "schlong","scrotum","semen","sex","sexo","sexy","shit","shits","shithead",
+  "shitty","shitting","skank","skanky","slut","sluts","slutty","smegma",
+  "snatch","spic","spick","spunk","stfu",
+  "testicle","testicles","tit","tits","titties","titty","twat","twats",
+  "vagina","viagra","vulva",
+  "wang","wank","wanker","whore","whores","wtf",
+];
+
+function containsProfanity(text) {
+  const lower = text.toLowerCase().replace(/[^a-z]/g, " ");
+  const words = lower.split(/\s+/);
+  return words.some(w => BLOCKED_WORDS.includes(w));
+}
+
 async function reverseGeocodeStreet(lat, lng) {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
@@ -2104,6 +2139,7 @@ function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, onAdminDe
   async function handlePost() {
     const body = draft.trim();
     if (!body || !userId || posting || userAlreadyCommented) return;
+    if (containsProfanity(body)) { alert("Please keep comments clean."); return; }
     setPosting(true);
     const { data, error } = await supabase
       .from("comments")
@@ -2243,6 +2279,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
   function saveEdit() {
     const name = editName.trim(), foodType = editFood.trim();
     if (!name || !foodType) return;
+    if (containsProfanity(name) || containsProfanity(foodType)) { alert("Please keep truck names and food types clean."); return; }
     onEditTruck(editingId, { name, foodType, open: editOpen });
     setEditingId(null);
   }
@@ -2627,6 +2664,7 @@ function App() {
     if (!canAdd) { showToast(`Daily limit of ${MAX_TRUCKS_PER_DAY} reached. Try again tomorrow.`); return; }
     if (!pendingPin) { showToast("Drop a pin on the map first."); return; }
     if (!name || !food) { showToast("Enter the truck name and food type."); return; }
+    if (containsProfanity(name) || containsProfanity(food)) { showToast("Please keep truck names and food types clean."); return; }
     if (trucks.some(t => t.name.toLowerCase() === name.toLowerCase())) { showToast(`"${name}" already exists!`); return; }
     if (!userId) { showToast("Still connecting — try again in a moment."); return; }
     const id = Date.now() + Math.floor(Math.random() * 1000);
