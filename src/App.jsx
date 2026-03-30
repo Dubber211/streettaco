@@ -1770,8 +1770,16 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
     setAddLocLoading(true);
     navigator.geolocation.getCurrentPosition(
       pos => { setAddPin([pos.coords.latitude, pos.coords.longitude]); setAddLocLoading(false); showToast("Location set!"); },
-      () => { setAddLocLoading(false); showToast("Couldn't get location."); },
-      { enableHighAccuracy: true, timeout: 10000 }
+      err => {
+        setAddLocLoading(false);
+        const msgs = {
+          [err.PERMISSION_DENIED]: "Location permission denied. Check browser settings.",
+          [err.POSITION_UNAVAILABLE]: "Location unavailable.",
+          [err.TIMEOUT]: "Location request timed out.",
+        };
+        showToast(msgs[err.code] || "Couldn't get location.");
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
     );
   }
 
