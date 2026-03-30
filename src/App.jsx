@@ -2890,11 +2890,9 @@ function App() {
           setUserVotes(votes);
         }
       }
-      // Check for admin trigger in URL
-      const params = new URLSearchParams(window.location.search);
-      if (params.has("admin")) {
+      // Check for admin trigger in URL (supports both ?admin and #admin)
+      if (window.location.hash === "#admin" || new URLSearchParams(window.location.search).has("admin")) {
         setShowAdminLogin(true);
-        window.history.replaceState({}, "", window.location.pathname);
       }
 
       setLoading(false);
@@ -3111,6 +3109,9 @@ function App() {
     setIsAdmin(true);
     setShowAdminLogin(false);
     setAdminView(true);
+    document.title = "StreetTaco Admin";
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#f59e0b");
+    document.querySelector('link[rel="manifest"]')?.setAttribute("href", "/manifest-admin.json");
     const { data: truckRows } = await supabase.from("trucks").select("*");
     if (truckRows) setTrucks(truckRows.map(toAppTruck));
     return { error: null };
@@ -3122,6 +3123,9 @@ function App() {
     setUserId(data?.user?.id || null);
     setIsAdmin(false);
     setAdminView(false);
+    document.title = "Street Taco App";
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#06b6d4");
+    document.querySelector('link[rel="manifest"]')?.setAttribute("href", "/manifest.json");
     const { data: truckRows } = await supabase.from("trucks").select("*");
     if (truckRows) setTrucks(truckRows.map(toAppTruck));
   }

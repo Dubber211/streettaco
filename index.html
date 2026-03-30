@@ -24,6 +24,11 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
+      if (window.location.hash === "#admin") {
+        document.querySelector('link[rel="manifest"]').href = "/manifest-admin.json";
+        document.title = "StreetTaco Admin";
+        document.querySelector('meta[name="theme-color"]').content = "#f59e0b";
+      }
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js");
