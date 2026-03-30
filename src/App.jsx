@@ -14,7 +14,7 @@ import "leaflet/dist/leaflet.css";
 
 /* ─── App Defaults ─────────────────────────────────────────────────────────── */
 const DEFAULT_CENTER = [41.6764, -86.252];
-const DEFAULT_RADIUS_MILES = 1;
+const DEFAULT_RADIUS_MILES = 0.5;
 const MOBILE_TRUCK_EXPIRATION_HOURS = 48;
 const MAX_TRUCKS_PER_DAY = 5;
 
@@ -279,7 +279,7 @@ function isTruckExpired(t) { return t.isPermanent ? false : hoursSince(t.lastCon
 function normalizeTruck(t) { const c = t.createdAt || nowIso(); return { ...t, isPermanent: Boolean(t.isPermanent), hours: t.hours || "", createdAt: c, lastConfirmedAt: t.lastConfirmedAt || c }; }
 
 /* ─── Map Sub-Components ────────────────────────────────────────────────────── */
-const RADIUS_OPTIONS = [1, 3, 5, 10, 25];
+const RADIUS_OPTIONS = [0.5, 1, 3, 5, 10, 25];
 
 function FitBoundsToRadius({ center, radiusMiles, skipRef }) {
   const map = useMap();
@@ -388,6 +388,19 @@ function ScheduleInput({ value, onChange }) {
 
 function AdminMapClick({ onPick }) {
   useMapEvents({ click(e) { onPick([e.latlng.lat, e.latlng.lng]); } });
+  return null;
+}
+
+const adminPinIcon = L.divIcon({
+  html: `<div style="width:24px;height:24px;background:#06b6d4;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
+  className: "",
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
+
+function AdminMapCenter({ center }) {
+  const map = useMap();
+  useEffect(() => { if (center) map.setView(center, 16, { animate: true }); }, [center, map]);
   return null;
 }
 
@@ -1544,6 +1557,7 @@ const css = `
   .admin-add-location { margin: 12px 0; }
   .admin-add-location-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
   .admin-pin-status { font-size: 0.82rem; color: var(--cyan); margin-top: 8px; }
+  .admin-search-row { display: flex; gap: 6px; margin-bottom: 8px; }
   .admin-add-map-wrapper { height: 250px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); margin: 10px 0; }
 
   .admin-comment-actions { display: flex; gap: 4px; }
@@ -1764,6 +1778,26 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
   const [addPin, setAddPin] = useState(null);
   const [addSaving, setAddSaving] = useState(false);
   const [addLocLoading, setAddLocLoading] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [addSearching, setAddSearching] = useState(false);
+
+  async function handleAdminSearch(e) {
+    e.preventDefault();
+    const q = addSearch.trim();
+    if (!q) return;
+    setAddSearching(true);
+    try {
+      const params = new URLSearchParams({ format: "jsonv2", limit: "1" });
+      /^\d{5}$/.test(q) ? (params.set("postalcode", q), params.set("countrycodes", "us")) : params.set("q", q);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      const data = await res.json();
+      if (data.length) {
+        setAddPin([Number(data[0].lat), Number(data[0].lon)]);
+        showToast(`Centered on ${q}.`);
+      } else { showToast("Location not found."); }
+    } catch { showToast("Search failed."); }
+    setAddSearching(false);
+  }
 
   function handleAdminUseLocation() {
     if (!navigator.geolocation) { showToast("Geolocation not supported."); return; }
@@ -1860,6 +1894,10 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
           </div>
           <div className="admin-add-location">
             <div className="admin-add-location-label">Location:</div>
+            <form onSubmit={handleAdminSearch} className="admin-search-row">
+              <input className="add-input" placeholder="Search city, address, or ZIP…" value={addSearch} onChange={e => setAddSearch(e.target.value)} style={{ flex: 1 }} />
+              <button type="submit" className="btn-admin-action verify" disabled={addSearching}>{addSearching ? "…" : "🔍"}</button>
+            </form>
             <div className="admin-btn-row">
               <button className="btn-admin-action verify" onClick={handleAdminUseLocation} disabled={addLocLoading}>
                 {addLocLoading ? "Getting location…" : "📍 Use my location"}
@@ -1869,10 +1907,11 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
             {addPin && <div className="admin-pin-status">✅ Pin at {addPin[0].toFixed(4)}, {addPin[1].toFixed(4)}</div>}
           </div>
           <div className="admin-add-map-wrapper">
-            <MapContainer center={addPin || [41.6764, -86.252]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+            <MapContainer center={addPin || [41.6764, -86.252]} zoom={16} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
               <TileLayer url={TILE_LIGHT} attribution='&copy; <a href="https://carto.com/">CARTO</a>' />
               <AdminMapClick onPick={pos => { setAddPin(pos); showToast("Pin dropped!"); }} />
-              {addPin && <Marker position={addPin} />}
+              <AdminMapCenter center={addPin} />
+              {addPin && <Marker position={addPin} icon={adminPinIcon} />}
             </MapContainer>
           </div>
           <label className="checkbox-row" style={{ margin: "10px 0" }}>
@@ -1997,33 +2036,26 @@ function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
 const PROXIMITY_KEY = "street-taco-proximity-prompts";
 const PROXIMITY_RADIUS_MILES = 0.5;
 
+function getStoredDismissals() {
+  try { return JSON.parse(localStorage.getItem(PROXIMITY_KEY) || "{}"); } catch { return {}; }
+}
+
 function ProximityPrompt({ userLocation, trucks, onConfirm }) {
   const [prompt, setPrompt] = useState(null);
-  const [dismissed, setDismissed] = useState({});
+  const [dismissed, setDismissed] = useState(getStoredDismissals);
 
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(PROXIMITY_KEY) || "{}");
-      setDismissed(stored);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (!userLocation || trucks.length === 0) return;
+  const nearbyTruck = useMemo(() => {
+    if (!userLocation || trucks.length === 0) return null;
     const today = new Date().toISOString().slice(0, 10);
     const mobileTrucks = trucks.filter(t => !t.isPermanent);
     for (const truck of mobileTrucks) {
       const dist = haversineMiles(userLocation, truck.position);
-      if (dist <= PROXIMITY_RADIUS_MILES) {
-        const key = `${truck.id}_${today}`;
-        if (!dismissed[key]) {
-          setPrompt(truck);
-          return;
-        }
-      }
+      if (dist <= PROXIMITY_RADIUS_MILES && !dismissed[`${truck.id}_${today}`]) return truck;
     }
-    setPrompt(null);
+    return null;
   }, [userLocation, trucks, dismissed]);
+
+  useEffect(() => { setPrompt(nearbyTruck); }, [nearbyTruck]);
 
   function markDone(truckId) {
     const today = new Date().toISOString().slice(0, 10);
