@@ -732,6 +732,9 @@ const css = `
 
   .map-wrapper.add-mode-active { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-glow), 0 8px 32px rgba(0,0,0,0.4); }
 
+  [data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(0); }
+  [data-theme="dark"] .leaflet-tile-pane img { filter: brightness(0.75) contrast(1.3); }
+
   .map-add-truck-overlay {
     position: absolute;
     top: 14px;
@@ -1932,7 +1935,7 @@ function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, new
 }
 
 /* ─── Map ───────────────────────────────────────────────────────────────────── */
-const TILE_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const TILE_DARK = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
 const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
 function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme }) {
