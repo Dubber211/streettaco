@@ -84,6 +84,8 @@ function toAppTruck(row) {
     lastConfirmedAt: row.last_confirmed_at,
     userId: row.user_id,
     street: row.street || null,
+    isHidden: row.is_hidden || false,
+    isVerified: row.is_verified || false,
   };
 }
 
@@ -1286,6 +1288,57 @@ const css = `
   }
   .btn-post-comment:disabled { opacity: 0.45; cursor: not-allowed; }
 
+  /* ── Admin ── */
+  .admin-login-card { max-width: 360px; width: 90vw; }
+  .admin-login-form { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-bottom: 8px; }
+  .admin-login-error { color: #ef4444; font-size: 0.85rem; text-align: center; }
+
+  .admin-panel { min-height: 100vh; background: var(--bg); color: var(--text); padding: 0; font-family: var(--font-body); }
+  .admin-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--surface1); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .admin-bar-title { font-family: var(--font-display); font-size: 1.15rem; font-weight: 800; }
+  .btn-admin-logout { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 6px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  .btn-admin-logout:hover { background: var(--surface3); }
+
+  .admin-filters { display: flex; gap: 8px; padding: 14px 20px; flex-wrap: wrap; }
+
+  .admin-truck-list { padding: 0 20px 40px; }
+  .admin-truck-row { background: var(--surface1); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; transition: opacity 0.2s; }
+  .admin-truck-row.admin-hidden { opacity: 0.5; }
+  .admin-truck-main { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+  .admin-truck-main:hover { background: var(--surface2); }
+  .admin-truck-emoji { font-size: 1.6rem; }
+  .admin-truck-info { flex: 1; min-width: 0; }
+  .admin-truck-name { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .admin-truck-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+  .admin-expand-icon { color: var(--text-dim); font-size: 0.75rem; }
+
+  .admin-badge { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .admin-badge.verified { background: #065f4620; color: #4ade80; border: 1px solid #4ade8040; }
+  .admin-badge.hidden { background: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
+
+  .admin-truck-actions { padding: 0 16px 14px; border-top: 1px solid var(--border); }
+  .admin-btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn-admin-action { padding: 6px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; transition: all 0.15s; }
+  .btn-admin-action:hover { background: var(--surface3); }
+  .btn-admin-action.hide { color: #ef4444; }
+  .btn-admin-action.delete { color: #ef4444; }
+  .btn-admin-action.restore { color: #4ade80; }
+  .btn-admin-action.verify { color: #4ade80; }
+  .btn-admin-action.unverify { color: #f59e0b; }
+
+  .admin-truck-detail { display: flex; gap: 16px; font-size: 0.75rem; color: var(--text-dim); margin-top: 10px; flex-wrap: wrap; }
+
+  .admin-comments { margin-top: 12px; }
+  .admin-comments-title { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+  .admin-comment-row { background: var(--surface2); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+  .admin-comment-row.admin-hidden { opacity: 0.5; }
+  .admin-comment-body { font-size: 0.85rem; color: var(--text); margin-bottom: 4px; }
+  .admin-comment-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px; }
+
+  .admin-comment-actions { display: flex; gap: 4px; }
+
+  .verified-badge { font-size: 0.8em; }
+
   /* ── Onboarding Overlay ── */
   .onboarding-backdrop {
     position: fixed;
@@ -1451,6 +1504,151 @@ const ONBOARDING_STEPS = [
   { type: "eula", icon: "📜", title: "End User License Agreement", body: "" },
   { type: "modal", icon: "🌮", title: "You're all set!", body: "Start exploring, add trucks you find, and help your community eat well." },
 ];
+
+/* ─── Admin Login Modal ─────────────────────────────────────────────────────── */
+function AdminLoginModal({ onLogin, onClose }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    setSubmitting(true);
+    setError("");
+    const result = await onLogin(email.trim(), password);
+    if (result.error) { setError(result.error); setSubmitting(false); }
+  }
+
+  return (
+    <div className="onboarding-backdrop">
+      <div className="onboarding-card admin-login-card">
+        <div className="onboarding-icon">🔐</div>
+        <div className="onboarding-title">Admin Login</div>
+        <form onSubmit={handleSubmit} className="admin-login-form">
+          <input type="email" className="add-input" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
+          <input type="password" className="add-input" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+          {error && <div className="admin-login-error">{error}</div>}
+          <button type="submit" className="btn-onboarding-next" disabled={submitting} style={{ width: "100%" }}>
+            {submitting ? "Signing in…" : "Sign In"}
+          </button>
+        </form>
+        <button className="btn-onboarding-skip" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Admin Panel ──────────────────────────────────────────────────────────── */
+function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onDeleteComment, onLogout, showToast }) {
+  const [filter, setFilter] = useState("all");
+  const [expandedTruck, setExpandedTruck] = useState(null);
+
+  const filtered = useMemo(() => {
+    if (filter === "hidden") return trucks.filter(t => t.isHidden);
+    if (filter === "unverified") return trucks.filter(t => !t.isVerified && !t.isHidden);
+    return trucks;
+  }, [trucks, filter]);
+
+  return (
+    <div className="admin-panel">
+      <div className="admin-bar">
+        <span className="admin-bar-title">🔐 Admin Mode</span>
+        <button className="btn-admin-logout" onClick={onLogout}>Logout</button>
+      </div>
+
+      <div className="admin-filters">
+        <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
+        <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({trucks.filter(t => t.isHidden).length})</button>
+        <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({trucks.filter(t => !t.isVerified && !t.isHidden).length})</button>
+      </div>
+
+      <div className="admin-truck-list">
+        {filtered.length === 0 && <div className="comments-empty">No trucks match this filter.</div>}
+        {filtered.map(truck => (
+          <div key={truck.id} className={`admin-truck-row ${truck.isHidden ? "admin-hidden" : ""}`}>
+            <div className="admin-truck-main" onClick={() => setExpandedTruck(e => e === truck.id ? null : truck.id)}>
+              <span className="admin-truck-emoji">{getFoodEmoji(truck.foodType)}</span>
+              <div className="admin-truck-info">
+                <div className="admin-truck-name">
+                  {truck.name}
+                  {truck.isVerified && <span className="admin-badge verified">Verified</span>}
+                  {truck.isHidden && <span className="admin-badge hidden">Hidden</span>}
+                </div>
+                <div className="admin-truck-meta">
+                  {truck.foodType} · {truck.open ? "Open" : "Closed"} · {truck.votes} votes · {timeAgo(truck.createdAt)}
+                </div>
+              </div>
+              <span className="admin-expand-icon">{expandedTruck === truck.id ? "▲" : "▼"}</span>
+            </div>
+
+            {expandedTruck === truck.id && (
+              <div className="admin-truck-actions">
+                <div className="admin-btn-row">
+                  <button className={`btn-admin-action ${truck.isHidden ? "restore" : "hide"}`} onClick={() => onToggleHide(truck.id, truck.isHidden)}>
+                    {truck.isHidden ? "👁 Restore" : "🚫 Hide"}
+                  </button>
+                  <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
+                    {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
+                  </button>
+                </div>
+                <div className="admin-truck-detail">
+                  <span>ID: {truck.id}</span>
+                  <span>User: {truck.userId?.slice(0, 8)}…</span>
+                  <span>Coords: {truck.position[0].toFixed(4)}, {truck.position[1].toFixed(4)}</span>
+                </div>
+                <AdminComments truckId={truck.id} onHide={onHideComment} onDelete={onDeleteComment} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminComments({ truckId, onHide, onDelete }) {
+  const [comments, setComments] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase.from("comments").select("id, body, created_at, user_id, votes, is_hidden").eq("truck_id", truckId).limit(50)
+      .then(({ data }) => { if (data) setComments(data); setLoaded(true); });
+  }, [truckId]);
+
+  if (!loaded) return <div className="comments-empty">Loading comments…</div>;
+  if (comments.length === 0) return <div className="comments-empty">No comments.</div>;
+
+  return (
+    <div className="admin-comments">
+      <div className="admin-comments-title">Comments ({comments.length})</div>
+      {comments.map(c => (
+        <div key={c.id} className={`admin-comment-row ${c.is_hidden ? "admin-hidden" : ""}`}>
+          <div className="admin-comment-body">
+            {c.is_hidden && <span className="admin-badge hidden">Hidden</span>}
+            {c.body}
+          </div>
+          <div className="admin-comment-meta">
+            {c.votes} votes · {timeAgo(c.created_at)} · {c.user_id?.slice(0, 8)}…
+          </div>
+          <div className="admin-btn-row">
+            {!c.is_hidden && (
+              <button className="btn-admin-action hide" onClick={async () => {
+                const ok = await onHide(c.id);
+                if (ok) setComments(cur => cur.map(x => x.id === c.id ? { ...x, is_hidden: true } : x));
+              }}>🚫 Hide</button>
+            )}
+            <button className="btn-admin-action delete" onClick={async () => {
+              const ok = await onDelete(c.id);
+              if (ok) setComments(cur => cur.filter(x => x.id !== c.id));
+            }}>🗑 Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function OnboardingOverlay({ onDismiss }) {
   const [step, setStep] = useState(0);
@@ -1793,7 +1991,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
                   <div className="popup-header">
                     <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
                     <div>
-                      <div className="popup-name">{truck.name}</div>
+                      <div className="popup-name">{truck.name}{truck.isVerified && <span title="Verified"> ✅</span>}</div>
                       <div className="popup-type">{truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}</div>
                     </div>
                   </div>
@@ -1867,7 +2065,7 @@ function PopupTopComment({ truckId }) {
 }
 
 /* ─── Truck Comments ────────────────────────────────────────────────────────── */
-function TruckComments({ truckId, userId }) {
+function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
   const [comments, setComments] = useState([]);
   const [commentVotes, setCommentVotes] = useState({});
   const [loadState, setLoadState] = useState("loading");
@@ -1968,6 +2166,12 @@ function TruckComments({ truckId, userId }) {
                     {c.user_id === userId && (
                       <button className="comment-del" onClick={() => handleDelete(c.id)} title="Delete">✕</button>
                     )}
+                    {isAdmin && c.user_id !== userId && (
+                      <div className="admin-comment-actions">
+                        <button className="comment-del" onClick={async () => { const ok = await onAdminHideComment(c.id); if (ok) setComments(cur => cur.filter(x => x.id !== c.id)); }} title="Hide">🚫</button>
+                        <button className="comment-del" onClick={async () => { const ok = await onAdminDeleteComment(c.id); if (ok) setComments(cur => cur.filter(x => x.id !== c.id)); }} title="Delete">🗑</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1999,7 +2203,7 @@ function TruckComments({ truckId, userId }) {
   );
 }
 
-function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite }) {
+function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
   const [showOpenOnly, setShowOpenOnly] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
@@ -2118,7 +2322,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                   {getFoodEmoji(truck.foodType)}
                 </div>
                 <div className="truck-card-info">
-                  <div className="truck-card-name">{truck.name}</div>
+                  <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>}</div>
                   <div className="truck-card-sub">
                     {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType} &nbsp;·&nbsp;
                     <span className={truck.open ? "open-tag" : "closed-tag"}>{truck.open ? "Open" : "Closed"}</span>
@@ -2174,7 +2378,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                   <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share">🔗</button>
                 </div>
               </div>
-              {commentsOpen && <TruckComments truckId={truck.id} userId={userId} />}
+              {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}
             </div>
           );
         })
@@ -2218,6 +2422,9 @@ function App() {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [focusRequest, setFocusRequest] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminView, setAdminView] = useState(false);
   const recentAdds = addHistory.filter(ts => hoursSince(ts) < 24);
   const canAdd = recentAdds.length < MAX_TRUCKS_PER_DAY;
   const addsRemaining = MAX_TRUCKS_PER_DAY - recentAdds.length;
@@ -2258,6 +2465,13 @@ function App() {
           setUserVotes(votes);
         }
       }
+      // Check for admin trigger in URL
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("admin")) {
+        setShowAdminLogin(true);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+
       setLoading(false);
     }
     init();
@@ -2419,6 +2633,72 @@ function App() {
     showToast(`"${name}" added! Thanks for the tip 🎉`);
   }
 
+  // ── Admin auth ──
+  async function handleAdminLogin(email, password) {
+    await supabase.auth.signOut();
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      await supabase.auth.signInAnonymously();
+      return { error: error.message };
+    }
+    const { data: adminRow } = await supabase.from("admin_users").select("id").eq("id", data.user.id).single();
+    if (!adminRow) {
+      await supabase.auth.signOut();
+      await supabase.auth.signInAnonymously();
+      return { error: "Not an admin account." };
+    }
+    setUserId(data.user.id);
+    setIsAdmin(true);
+    setShowAdminLogin(false);
+    setAdminView(true);
+    const { data: truckRows } = await supabase.from("trucks").select("*");
+    if (truckRows) setTrucks(truckRows.map(toAppTruck));
+    return { error: null };
+  }
+
+  async function handleAdminLogout() {
+    await supabase.auth.signOut();
+    const { data } = await supabase.auth.signInAnonymously();
+    setUserId(data?.user?.id || null);
+    setIsAdmin(false);
+    setAdminView(false);
+    const { data: truckRows } = await supabase.from("trucks").select("*");
+    if (truckRows) setTrucks(truckRows.map(toAppTruck));
+  }
+
+  // ── Admin actions ──
+  async function handleToggleHideTruck(id, currentlyHidden) {
+    const { error } = await supabase.from("trucks").update({ is_hidden: !currentlyHidden }).eq("id", id);
+    if (error) showToast("Failed to update truck visibility.");
+    else {
+      setTrucks(cur => cur.map(t => t.id === id ? { ...t, isHidden: !currentlyHidden } : t));
+      showToast(currentlyHidden ? "Truck restored." : "Truck hidden.");
+    }
+  }
+
+  async function handleToggleVerifyTruck(id, currentlyVerified) {
+    const { error } = await supabase.from("trucks").update({ is_verified: !currentlyVerified }).eq("id", id);
+    if (error) showToast("Failed to update verification.");
+    else {
+      setTrucks(cur => cur.map(t => t.id === id ? { ...t, isVerified: !currentlyVerified } : t));
+      showToast(currentlyVerified ? "Verification removed." : "Truck verified!");
+    }
+  }
+
+  async function handleAdminHideComment(commentId) {
+    const { error } = await supabase.from("comments").update({ is_hidden: true }).eq("id", commentId);
+    if (error) showToast("Failed to hide comment.");
+    else showToast("Comment hidden.");
+    return !error;
+  }
+
+  async function handleAdminDeleteComment(commentId) {
+    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    if (error) showToast("Failed to delete comment.");
+    else showToast("Comment deleted.");
+    return !error;
+  }
+
   const activeTrucks = useMemo(() =>
     trucks.map(normalizeTruck).filter(t => !isTruckExpired(t)),
     [trucks]
@@ -2462,16 +2742,29 @@ function App() {
 
   return (
     <>
-      {!onboardingDone && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} />}
+      {showAdminLogin && <AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
+      {!onboardingDone && !adminView && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} />}
       <StyleInjector />
       <ToastContainer toasts={toasts} />
-      <div className="app-shell">
-        <Header theme={theme} onToggleTheme={toggleTheme} />
-        <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
-        <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} />
-        <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} />
-        <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} />
-      </div>
+      {adminView ? (
+        <AdminPanel
+          trucks={trucks.map(normalizeTruck)}
+          onToggleHide={handleToggleHideTruck}
+          onToggleVerify={handleToggleVerifyTruck}
+          onHideComment={handleAdminHideComment}
+          onDeleteComment={handleAdminDeleteComment}
+          onLogout={handleAdminLogout}
+          showToast={showToast}
+        />
+      ) : (
+        <div className="app-shell">
+          <Header theme={theme} onToggleTheme={toggleTheme} />
+          <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
+          <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} />
+          <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} />
+          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} />
+        </div>
+      )}
     </>
   );
 }
