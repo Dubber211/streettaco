@@ -91,12 +91,17 @@ function containsProfanity(text) {
   return words.some(w => BLOCKED_WORDS.includes(w));
 }
 
-async function reverseGeocodeStreet(lat, lng) {
+async function reverseGeocode(lat, lng) {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
     const data = await res.json();
-    return data?.address?.road || null;
-  } catch { return null; }
+    const addr = data?.address || {};
+    return {
+      street: addr.road || null,
+      city: addr.city || addr.town || addr.village || addr.hamlet || null,
+      state: addr.state || null,
+    };
+  } catch { return { street: null, city: null, state: null }; }
 }
 
 const FOOD_EMOJIS = {
@@ -136,6 +141,8 @@ function toAppTruck(row) {
     lastConfirmedAt: row.last_confirmed_at,
     userId: row.user_id,
     street: row.street || null,
+    city: row.city || null,
+    state: row.state || null,
     isHidden: row.is_hidden || false,
     isVerified: row.is_verified || false,
   };
@@ -1396,6 +1403,9 @@ const css = `
   .admin-comment-body { font-size: 0.85rem; color: var(--text); margin-bottom: 4px; }
   .admin-comment-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px; }
 
+  .admin-group { margin-bottom: 20px; }
+  .admin-group-header { font-family: var(--font-display); font-size: 1rem; font-weight: 800; color: var(--cyan); padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+
   .admin-add-form { padding: 16px 20px; background: var(--surface1); border-bottom: 1px solid var(--border); }
   .admin-add-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 12px; }
   .admin-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1630,11 +1640,46 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
     setShowAddForm(false);
   }
 
+  const [backfilling, setBackfilling] = useState(false);
+
+  async function handleBackfill() {
+    const missing = trucks.filter(t => !t.city || !t.state);
+    if (missing.length === 0) { showToast("All trucks already have city/state."); return; }
+    setBackfilling(true);
+    let count = 0;
+    for (const t of missing) {
+      const geo = await reverseGeocode(t.position[0], t.position[1]);
+      if (geo.city || geo.state) {
+        await supabase.from("trucks").update({
+          ...(geo.street ? { street: geo.street } : {}),
+          ...(geo.city ? { city: geo.city } : {}),
+          ...(geo.state ? { state: geo.state } : {}),
+        }).eq("id", t.id);
+        count++;
+      }
+      await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit
+    }
+    showToast(`Backfilled ${count} of ${missing.length} trucks. Reload to see updates.`);
+    setBackfilling(false);
+  }
+
   const filtered = useMemo(() => {
     if (filter === "hidden") return trucks.filter(t => t.isHidden);
     if (filter === "unverified") return trucks.filter(t => !t.isVerified && !t.isHidden);
     return trucks;
   }, [trucks, filter]);
+
+  const grouped = useMemo(() => {
+    const groups = {};
+    filtered.forEach(t => {
+      const key = t.city && t.state ? `${t.city}, ${t.state}` : t.state || "Unknown Location";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
+
+  const missingCount = trucks.filter(t => !t.city || !t.state).length;
 
   return (
     <div className="admin-panel">
@@ -1642,6 +1687,11 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
         <span className="admin-bar-title">🔐 Admin Mode</span>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-admin-logout" style={{ background: "var(--cyan)", color: "#fff", borderColor: "var(--cyan)" }} onClick={() => setShowAddForm(f => !f)}>+ Add Truck</button>
+          {missingCount > 0 && (
+            <button className="btn-admin-logout" onClick={handleBackfill} disabled={backfilling}>
+              {backfilling ? "Backfilling…" : `Backfill (${missingCount})`}
+            </button>
+          )}
           <button className="btn-admin-logout" onClick={onLogout}>Logout</button>
         </div>
       </div>
@@ -1675,7 +1725,10 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
 
       <div className="admin-truck-list">
         {filtered.length === 0 && <div className="comments-empty">No trucks match this filter.</div>}
-        {filtered.map(truck => (
+        {grouped.map(([location, locationTrucks]) => (
+          <div key={location} className="admin-group">
+            <div className="admin-group-header">{location} ({locationTrucks.length})</div>
+            {locationTrucks.map(truck => (
           <div key={truck.id} className={`admin-truck-row ${truck.isHidden ? "admin-hidden" : ""}`}>
             <div className="admin-truck-main" onClick={() => setExpandedTruck(e => e === truck.id ? null : truck.id)}>
               <span className="admin-truck-emoji">{getFoodEmoji(truck.foodType)}</span>
@@ -1713,6 +1766,8 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
                 <AdminComments truckId={truck.id} onHide={onHideComment} onUnhide={onUnhideComment} onDelete={onDeleteComment} />
               </div>
             )}
+          </div>
+        ))}
           </div>
         ))}
       </div>
@@ -2748,13 +2803,15 @@ function App() {
     if (!userId) { showToast("Still connecting — try again in a moment."); return; }
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const ts = nowIso();
-    const street = await reverseGeocodeStreet(pendingPin[0], pendingPin[1]);
+    const geo = await reverseGeocode(pendingPin[0], pendingPin[1]);
     const { error } = await supabase.from("trucks").insert({
       id, name, food_type: food, open: newTruckOpen, votes: 1,
       lat: pendingPin[0], lng: pendingPin[1],
       is_permanent: newTruckPermanent, hours: newTruckPermanent ? hours : "",
       user_id: userId, created_at: ts, last_confirmed_at: ts,
-      ...(street ? { street } : {}),
+      ...(geo.street ? { street: geo.street } : {}),
+      ...(geo.city ? { city: geo.city } : {}),
+      ...(geo.state ? { state: geo.state } : {}),
     });
     if (error) { console.error("Save truck error:", error); showToast("Couldn't save truck — try again."); return; }
     setUserVotes(cv => ({ ...cv, [id]: 1 }));
@@ -2841,12 +2898,14 @@ function App() {
   async function handleAdminAddTruck({ name, food, open, isPermanent, hours, lat, lng }) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const ts = nowIso();
-    const street = await reverseGeocodeStreet(lat, lng);
+    const geo = await reverseGeocode(lat, lng);
     const { error } = await supabase.from("trucks").insert({
       id, name, food_type: food, open, votes: 1,
       lat, lng, is_permanent: isPermanent, hours: isPermanent ? hours : "",
       user_id: userId, created_at: ts, last_confirmed_at: ts,
-      ...(street ? { street } : {}),
+      ...(geo.street ? { street: geo.street } : {}),
+      ...(geo.city ? { city: geo.city } : {}),
+      ...(geo.state ? { state: geo.state } : {}),
     });
     if (error) { showToast("Failed to add truck."); return; }
     showToast(`"${name}" added!`);
