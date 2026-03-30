@@ -2921,7 +2921,7 @@ function App() {
   }
 
   const activeTrucks = useMemo(() =>
-    trucks.map(normalizeTruck).filter(t => !isTruckExpired(t)),
+    trucks.map(normalizeTruck).filter(t => !isTruckExpired(t) && !t.isHidden),
     [trucks]
   );
 
