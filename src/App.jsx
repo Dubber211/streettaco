@@ -189,16 +189,21 @@ const RADIUS_OPTIONS = [1, 3, 5, 10, 25];
 
 function FitBoundsToRadius({ center, radiusMiles, skipRef }) {
   const map = useMap();
+  const initialRef = useRef(true);
   useEffect(() => {
     if (skipRef.current) { skipRef.current = false; return; }
     const [lat, lng] = center;
     const R = 3958.8;
     const latDelta = (radiusMiles / R) * (180 / Math.PI);
     const lngDelta = (radiusMiles / (R * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
-    map.fitBounds(
-      [[lat - latDelta, lng - lngDelta], [lat + latDelta, lng + lngDelta]],
-      { animate: true }
-    );
+    const bounds = [[lat - latDelta, lng - lngDelta], [lat + latDelta, lng + lngDelta]];
+    if (initialRef.current) {
+      initialRef.current = false;
+      // Safari/iOS PWA: container may have 0 height on first render
+      setTimeout(() => { map.invalidateSize(); map.fitBounds(bounds, { animate: false }); }, 100);
+    } else {
+      map.fitBounds(bounds, { animate: true });
+    }
   }, [center, radiusMiles, map, skipRef]);
   return null;
 }
