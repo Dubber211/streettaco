@@ -1601,7 +1601,7 @@ function AdminLoginModal({ onLogin, onClose }) {
 }
 
 /* ─── Admin Panel ──────────────────────────────────────────────────────────── */
-function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onDeleteComment, onLogout, showToast }) {
+function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onLogout, showToast }) {
   const [filter, setFilter] = useState("all");
   const [expandedTruck, setExpandedTruck] = useState(null);
 
@@ -1652,13 +1652,16 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onDel
                   <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
                     {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
                   </button>
+                  <button className="btn-admin-action delete" onClick={() => { if (window.confirm(`Permanently delete "${truck.name}"? This cannot be undone.`)) onDeleteTruck(truck.id); }}>
+                    🗑 Delete
+                  </button>
                 </div>
                 <div className="admin-truck-detail">
                   <span>ID: {truck.id}</span>
                   <span>User: {truck.userId?.slice(0, 8)}…</span>
                   <span>Coords: {truck.position[0].toFixed(4)}, {truck.position[1].toFixed(4)}</span>
                 </div>
-                <AdminComments truckId={truck.id} onHide={onHideComment} onDelete={onDeleteComment} />
+                <AdminComments truckId={truck.id} onHide={onHideComment} onUnhide={onUnhideComment} onDelete={onDeleteComment} />
               </div>
             )}
           </div>
@@ -1668,7 +1671,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onDel
   );
 }
 
-function AdminComments({ truckId, onHide, onDelete }) {
+function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
   const [comments, setComments] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -1693,7 +1696,12 @@ function AdminComments({ truckId, onHide, onDelete }) {
             {c.votes} votes · {timeAgo(c.created_at)} · {c.user_id?.slice(0, 8)}…
           </div>
           <div className="admin-btn-row">
-            {!c.is_hidden && (
+            {c.is_hidden ? (
+              <button className="btn-admin-action restore" onClick={async () => {
+                const ok = await onUnhide(c.id);
+                if (ok) setComments(cur => cur.map(x => x.id === c.id ? { ...x, is_hidden: false } : x));
+              }}>👁 Unhide</button>
+            ) : (
               <button className="btn-admin-action hide" onClick={async () => {
                 const ok = await onHide(c.id);
                 if (ok) setComments(cur => cur.map(x => x.id === c.id ? { ...x, is_hidden: true } : x));
@@ -2761,11 +2769,27 @@ function App() {
     return !error;
   }
 
+  async function handleAdminUnhideComment(commentId) {
+    const { error } = await supabase.from("comments").update({ is_hidden: false }).eq("id", commentId);
+    if (error) showToast("Failed to unhide comment.");
+    else showToast("Comment restored.");
+    return !error;
+  }
+
   async function handleAdminDeleteComment(commentId) {
     const { error } = await supabase.from("comments").delete().eq("id", commentId);
     if (error) showToast("Failed to delete comment.");
     else showToast("Comment deleted.");
     return !error;
+  }
+
+  async function handleAdminDeleteTruck(id) {
+    const { error } = await supabase.from("trucks").delete().eq("id", id);
+    if (error) showToast("Failed to delete truck.");
+    else {
+      setTrucks(cur => cur.filter(t => t.id !== id));
+      showToast("Truck permanently deleted.");
+    }
   }
 
   const activeTrucks = useMemo(() =>
@@ -2821,7 +2845,9 @@ function App() {
           onToggleHide={handleToggleHideTruck}
           onToggleVerify={handleToggleVerifyTruck}
           onHideComment={handleAdminHideComment}
+          onUnhideComment={handleAdminUnhideComment}
           onDeleteComment={handleAdminDeleteComment}
+          onDeleteTruck={handleAdminDeleteTruck}
           onLogout={handleAdminLogout}
           showToast={showToast}
         />
