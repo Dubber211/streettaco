@@ -967,6 +967,21 @@ const css = `
   .list-empty .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
   .list-empty p { font-size: 0.9rem; }
 
+  .btn-find-nearest {
+    margin-top: 14px;
+    padding: 10px 20px;
+    background: var(--cyan);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 16px var(--cyan-glow);
+  }
+  .btn-find-nearest:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--cyan-glow); }
+
   .truck-card {
     display: flex;
     align-items: center;
@@ -2376,7 +2391,7 @@ function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, onAdminDe
   );
 }
 
-function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
+function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment, onFindNearest }) {
   const [showOpenOnly, setShowOpenOnly] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
@@ -2460,6 +2475,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
               ? <>No trucks in this radius yet.<br />Try zooming out or adding one!</>
               : <>No trucks match your filters.<br />Try clearing them.</>}
           </p>
+          {onFindNearest && <button className="btn-find-nearest" onClick={onFindNearest}>📍 Find nearest truck</button>}
         </div>
       ) : (
         displayed.map(truck => {
@@ -2753,6 +2769,17 @@ function App() {
     else showToast("Truck updated ✅");
   }
 
+  function handleFindNearest() {
+    const ref = userLocation || mapCenter;
+    const withDist = activeTrucks.map(t => ({ ...t, dist: haversineMiles(ref, t.position) }));
+    if (withDist.length === 0) { showToast("No trucks found anywhere yet."); return; }
+    withDist.sort((a, b) => a.dist - b.dist);
+    const nearest = withDist[0];
+    setMapCenter(nearest.position);
+    setFocusRequest(r => ({ id: nearest.id, seq: (r?.seq ?? 0) + 1 }));
+    showToast(`Nearest truck: ${nearest.name} (${nearest.dist.toFixed(1)} mi)`);
+  }
+
   function handleShareTruck(id) {
     const url = `${window.location.origin}${window.location.pathname}?truck=${id}`;
     navigator.clipboard.writeText(url).then(
@@ -2986,7 +3013,7 @@ function App() {
           <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
           <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} />
           <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} />
-          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} />
+          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} />
         </div>
       )}
     </>
