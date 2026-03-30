@@ -1,16 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="96" fill="#0f172a"/>
-  <circle cx="256" cy="240" r="140" fill="none" stroke="#06b6d4" stroke-width="12" opacity="0.3"/>
-  <circle cx="256" cy="240" r="80" fill="none" stroke="#06b6d4" stroke-width="8" opacity="0.15"/>
-  <circle cx="256" cy="240" r="8" fill="#06b6d4"/>
-  <line x1="256" y1="240" x2="256" y2="140" stroke="#06b6d4" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
-  <line x1="256" y1="240" x2="320" y2="200" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
-  <g transform="translate(200, 160)">
-    <rect x="20" y="30" width="72" height="50" rx="8" fill="#06b6d4"/>
-    <rect x="28" y="80" width="14" height="12" rx="7" fill="#06b6d4"/>
-    <rect x="70" y="80" width="14" height="12" rx="7" fill="#06b6d4"/>
-    <rect x="0" y="36" width="112" height="8" rx="4" fill="#22d3ee" opacity="0.6"/>
-  </g>
-  <text x="256" y="430" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="72" fill="#f1f5f9">ST</text>
-  <text x="256" y="470" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="28" fill="#06b6d4">STREETTACO</text>
+  <!-- Map pin body -->
+  <path d="M256 460 C256 460 380 300 380 210 A124 124 0 1 0 132 210 C132 300 256 460 256 460Z" fill="#06b6d4"/>
+  <path d="M256 450 C256 450 370 296 370 210 A114 114 0 1 0 142 210 C142 296 256 450 256 450Z" fill="#0e7490"/>
+  <!-- Inner circle -->
+  <circle cx="256" cy="200" r="90" fill="#0f172a"/>
+  <!-- Taco shell -->
+  <path d="M176 220 Q216 140 256 160 Q296 140 336 220 Q306 240 256 244 Q206 240 176 220Z" fill="#f59e0b"/>
+  <path d="M180 218 Q218 148 256 166 Q294 148 332 218 Q304 234 256 238 Q208 234 180 218Z" fill="#fbbf24"/>
+  <!-- Lettuce -->
+  <path d="M192 214 Q210 190 230 210 Q245 188 260 208 Q275 186 292 210 Q305 192 322 216 Q290 230 256 232 Q222 230 192 214Z" fill="#4ade80"/>
+  <!-- Tomato bits -->
+  <circle cx="220" cy="208" r="6" fill="#ef4444"/>
+  <circle cx="256" cy="202" r="5" fill="#ef4444"/>
+  <circle cx="290" cy="208" r="6" fill="#ef4444"/>
+  <!-- Meat -->
+  <path d="M198 218 Q220 200 240 216 Q256 198 272 216 Q290 200 314 218 Q290 228 256 232 Q222 228 198 218Z" fill="#92400e"/>
 </svg>
