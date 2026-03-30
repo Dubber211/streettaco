@@ -24,7 +24,7 @@ const STORAGE_KEYS = {
   radius: "street-taco-radius",
   addHistory: "street-taco-add-history",
   myTruckIds: "street-taco-my-trucks",
-  onboarding: "street-taco-onboarding-done",
+  onboarding: "street-taco-onboarding-v2",
   theme: "street-taco-theme",
   favorites: "street-taco-favorites",
   confirmHistory: "street-taco-confirm-history",
