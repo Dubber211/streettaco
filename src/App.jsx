@@ -2496,7 +2496,13 @@ function App() {
       })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    // Polling fallback in case realtime websocket fails
+    const poll = setInterval(async () => {
+      const { data } = await supabase.from("trucks").select("*");
+      if (data) setTrucks(data.map(toAppTruck));
+    }, 30000);
+
+    return () => { supabase.removeChannel(channel); clearInterval(poll); };
   }, []);
 
   function applyUserLocation(lat, lng, msg = "Centered on your location.") {
