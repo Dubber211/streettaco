@@ -857,19 +857,42 @@ const css = `
   .step.active .step-label { color: var(--text); }
   .step.done .step-label { color: var(--green); }
 
-  .proximity-prompt {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    background: var(--bg); border: 1px solid var(--cyan); border-radius: 14px;
-    padding: 14px 18px; display: flex; align-items: center; gap: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 1000; max-width: 90vw;
-    animation: slideUp 0.3s ease-out;
+  .proximity-overlay {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.2s ease-out;
   }
-  @keyframes slideUp { from { transform: translateX(-50%) translateY(30px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
-  .proximity-prompt-text { font-size: 0.88rem; color: var(--text); flex: 1; }
-  .proximity-prompt-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .proximity-btn { padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; border: none; cursor: pointer; }
-  .proximity-btn.confirm { background: var(--cyan); color: #fff; }
-  .proximity-btn.dismiss { background: var(--surface2); color: var(--text-muted); }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .proximity-prompt {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 20px;
+    padding: 32px 28px 28px; text-align: center; max-width: 320px; width: 90vw;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(6,182,212,0.15);
+    animation: popIn 0.25s ease-out;
+  }
+  @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  .proximity-icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .proximity-title { font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+  .proximity-text { font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 24px; }
+  .proximity-text strong { color: var(--cyan); }
+
+  .proximity-actions { display: flex; gap: 10px; }
+  .proximity-btn {
+    flex: 1; padding: 12px 16px; border-radius: 12px; font-size: 0.9rem;
+    font-weight: 700; border: none; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    font-family: var(--font-display);
+  }
+  .proximity-btn:hover { transform: translateY(-1px); }
+  .proximity-btn.confirm {
+    background: linear-gradient(135deg, #06b6d4, #0891b2); color: #fff;
+    box-shadow: 0 4px 16px var(--cyan-glow);
+  }
+  .proximity-btn.confirm:hover { box-shadow: 0 8px 24px var(--cyan-glow); }
+  .proximity-btn.dismiss {
+    background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border);
+  }
 
   .schedule-section-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 10px 0 4px; }
   .schedule-input { margin: 8px 0; }
@@ -2246,13 +2269,15 @@ function ProximityPrompt({ userLocation, trucks, onConfirm }) {
   if (!prompt) return null;
 
   return (
-    <div className="proximity-prompt">
-      <div className="proximity-prompt-text">
-        📍 Near <strong>{prompt.name}</strong>? Is it still here?
-      </div>
-      <div className="proximity-prompt-actions">
-        <button className="proximity-btn confirm" onClick={() => { onConfirm(prompt.id); markDone(prompt.id); }}>Still here ✅</button>
-        <button className="proximity-btn dismiss" onClick={() => markDone(prompt.id)}>Dismiss</button>
+    <div className="proximity-overlay">
+      <div className="proximity-prompt">
+        <div className="proximity-icon">📍</div>
+        <div className="proximity-title">Truck Nearby!</div>
+        <div className="proximity-text">Are you near <strong>{prompt.name}</strong>?<br />Help the community — confirm it's still here.</div>
+        <div className="proximity-actions">
+          <button className="proximity-btn confirm" onClick={() => { onConfirm(prompt.id); markDone(prompt.id); }}>Still here</button>
+          <button className="proximity-btn dismiss" onClick={() => markDone(prompt.id)}>Not anymore</button>
+        </div>
       </div>
     </div>
   );
