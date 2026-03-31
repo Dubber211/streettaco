@@ -122,8 +122,25 @@ function isOpenBySchedule(hours) {
 function formatSchedule(hours) {
   const s = parseSchedule(hours);
   if (!s) return hours || "";
-  const days = s.days.sort().map(d => DAY_LABELS[d]).join(", ");
-  return `${days} ${s.open}–${s.close}`;
+  const sorted = [...s.days].sort();
+  let dayStr;
+  if (sorted.length === 7) {
+    dayStr = "Every day";
+  } else if (sorted.length >= 5) {
+    const closed = DAY_LABELS.filter((_, i) => !sorted.includes(i));
+    dayStr = `Closed ${closed.join(", ")}`;
+  } else if (sorted.length === 5 && sorted[0] === 1 && sorted[4] === 5) {
+    dayStr = "Mon–Fri";
+  } else {
+    dayStr = sorted.map(d => DAY_LABELS[d]).join(", ");
+  }
+  function to12h(t) {
+    const [h, m] = t.split(":").map(Number);
+    const suffix = h >= 12 ? "pm" : "am";
+    const hr = h % 12 || 12;
+    return m ? `${hr}:${String(m).padStart(2,"0")}${suffix}` : `${hr}${suffix}`;
+  }
+  return `${dayStr} ${to12h(s.open)}–${to12h(s.close)}`;
 }
 
 async function reverseGeocode(lat, lng) {
@@ -1242,19 +1259,13 @@ const css = `
   }
 
   .score-pill {
-    background: var(--surface3);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 700;
     color: var(--text-muted);
-    min-width: 48px;
-    text-align: center;
   }
 
-  .score-pill.positive { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.2); color: #4ade80; }
-  .score-pill.negative { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.2); color: #f87171; }
+  .score-pill.positive { color: #4ade80; }
+  .score-pill.negative { color: #f87171; }
 
   .icon-btn {
     width: 34px; height: 34px;
