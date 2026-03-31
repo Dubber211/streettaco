@@ -1,0 +1,450 @@
+import { useEffect, useMemo, useState, useRef } from "react";
+import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import { supabase } from "../supabase";
+import { DEFAULT_CENTER, TILE_LIGHT, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, STORAGE_KEYS } from "../constants";
+import { getFoodEmoji, makeTruckIcon, adminPinIcon, formatSchedule, timeAgo, isOpenBySchedule, isTruckExpired, reverseGeocode } from "../utils";
+import { FocusTruck } from "./MapHelpers";
+import { ScheduleInput } from "./MapHelpers";
+
+export function AdminMapClick({ onPick }) {
+  useMapEvents({ click(e) { onPick([e.latlng.lat, e.latlng.lng]); } });
+  return null;
+}
+
+export function AdminMapCenter({ center }) {
+  const map = useMap();
+  useEffect(() => { if (center) map.setView(center, 16, { animate: true }); }, [center, map]);
+  return null;
+}
+
+export function FitBoundsToTrucks({ trucks }) {
+  const map = useMap();
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    if (fittedRef.current || trucks.length === 0) return;
+    fittedRef.current = true;
+    const bounds = L.latLngBounds(trucks.map(t => t.position));
+    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+  }, [trucks, map]);
+  return null;
+}
+
+export function AdminMap({ trucks, focusRequest, addMode, editMode, addPin, onPickLocation }) {
+  const markerRefs = useRef({});
+
+  return (
+    <div className="admin-map-wrapper">
+      {(addMode || editMode) && <div className="admin-map-hint">📍 Click the map to {editMode ? "move the pin" : "drop a pin"}</div>}
+      <MapContainer center={DEFAULT_CENTER} zoom={5} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+        <TileLayer url={TILE_LIGHT} attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
+        <FitBoundsToTrucks trucks={trucks} />
+        <FocusTruck trucks={trucks} focusRequest={focusRequest} markerRefs={markerRefs} zoom={16} />
+        {(addMode || editMode) && <AdminMapClick onPick={onPickLocation} />}
+        {addPin && <AdminMapCenter center={addPin} />}
+        {addPin && <Marker position={addPin} icon={adminPinIcon} />}
+        {trucks.map(truck => {
+          const icon = makeTruckIcon(truck.foodType, truck.open);
+          return (
+            <Marker key={truck.id} ref={el => { if (el) markerRefs.current[truck.id] = el; }} position={truck.position} icon={icon} opacity={truck.isHidden ? 0.4 : 1}>
+              <Popup autoPan={false}>
+                <div className="popup-card">
+                  <div className="popup-header">
+                    <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
+                    <div>
+                      <div className="popup-name">
+                        {truck.name}
+                        {truck.isVerified && <span> ✅</span>}
+                        {truck.isHidden && <span style={{ color: "#ef4444" }}> [Hidden]</span>}
+                      </div>
+                      <div className="popup-type">{truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}</div>
+                    </div>
+                  </div>
+                  <div className="popup-badges">
+                    <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`}>{truck.open ? "● Open" : "○ Closed"}</span>
+                    <span className={`badge ${truck.isPermanent ? "badge-perm" : "badge-mobile"}`}>{truck.isPermanent ? "📌 Permanent" : "🚚 Mobile"}</span>
+                  </div>
+                  <div className="popup-meta">
+                    <span>⭐ {truck.votes} votes</span>
+                    {truck.hours && <span>⏰ {formatSchedule(truck.hours)}</span>}
+                    {truck.city && truck.state && <span>📍 {truck.city}, {truck.state}</span>}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+    </div>
+  );
+}
+
+
+/* ─── Admin Login Modal ─────────────────────────────────────────────────────── */
+export function AdminLoginModal({ onLogin, onClose }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    setSubmitting(true);
+    setError("");
+    const result = await onLogin(email.trim(), password);
+    if (result.error) { setError(result.error); setSubmitting(false); }
+  }
+
+  return (
+    <div className="onboarding-backdrop">
+      <div className="onboarding-card admin-login-card">
+        <div className="onboarding-icon">🔐</div>
+        <div className="onboarding-title">Admin Login</div>
+        <form onSubmit={handleSubmit} className="admin-login-form">
+          <input type="email" className="add-input" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
+          <input type="password" className="add-input" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+          {error && <div className="admin-login-error">{error}</div>}
+          <button type="submit" className="btn-onboarding-next" disabled={submitting} style={{ width: "100%" }}>
+            {submitting ? "Signing in…" : "Sign In"}
+          </button>
+        </form>
+        <button className="btn-onboarding-skip" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Admin Panel ──────────────────────────────────────────────────────────── */
+export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onEditTruck, onReconfirm, onApprove, onReject, onAddTruck, onLogout, showToast }) {
+  const [filter, setFilter] = useState("all");
+  const [expandedTruck, setExpandedTruck] = useState(null);
+  const [adminFocusRequest, setAdminFocusRequest] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addFood, setAddFood] = useState("");
+  const [addOpen, setAddOpen] = useState(true);
+  const [addPermanent, setAddPermanent] = useState(false);
+  const [addHours, setAddHours] = useState("");
+  const [addPin, setAddPin] = useState(null);
+  const [addSaving, setAddSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editFood, setEditFood] = useState("");
+  const [editOpen, setEditOpen] = useState(true);
+  const [editHours, setEditHours] = useState("");
+  const [editPermanent, setEditPermanent] = useState(false);
+  const [editPin, setEditPin] = useState(null);
+
+  function startEdit(truck) {
+    setEditingId(truck.id);
+    setEditName(truck.name);
+    setEditFood(truck.foodType);
+    setEditOpen(truck.open);
+    setEditHours(truck.hours || "");
+    setEditPermanent(truck.isPermanent);
+    setEditPin(truck.position);
+  }
+
+  function saveEdit() {
+    const name = editName.trim(), foodType = editFood.trim();
+    if (!name || !foodType) return;
+    if (!editPin) return;
+    const scheduleOpen = isOpenBySchedule(editHours);
+    onEditTruck(editingId, {
+      name, foodType, open: scheduleOpen !== null ? scheduleOpen : editOpen,
+      hours: editHours, isPermanent: editPermanent,
+      lat: editPin[0], lng: editPin[1],
+    });
+    setEditingId(null);
+  }
+  const [addLocLoading, setAddLocLoading] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [addSearching, setAddSearching] = useState(false);
+
+  async function handleAdminSearch(e) {
+    e.preventDefault();
+    const q = addSearch.trim();
+    if (!q) return;
+    setAddSearching(true);
+    try {
+      const params = new URLSearchParams({ format: "jsonv2", limit: "1" });
+      /^\d{5}$/.test(q) ? (params.set("postalcode", q), params.set("countrycodes", "us")) : params.set("q", q);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      const data = await res.json();
+      if (data.length) {
+        setAddPin([Number(data[0].lat), Number(data[0].lon)]);
+        showToast(`Centered on ${q}.`);
+      } else { showToast("Location not found."); }
+    } catch { showToast("Search failed."); }
+    setAddSearching(false);
+  }
+
+  function handleAdminUseLocation() {
+    if (!navigator.geolocation) { showToast("Geolocation not supported."); return; }
+    setAddLocLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => { setAddPin([pos.coords.latitude, pos.coords.longitude]); setAddLocLoading(false); showToast("Location set!"); },
+      err => {
+        setAddLocLoading(false);
+        const msgs = {
+          [err.PERMISSION_DENIED]: "Location permission denied. Check browser settings.",
+          [err.POSITION_UNAVAILABLE]: "Location unavailable.",
+          [err.TIMEOUT]: "Location request timed out.",
+        };
+        showToast(msgs[err.code] || "Couldn't get location.");
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+    );
+  }
+
+  async function handleAdminAdd() {
+    const name = addName.trim(), food = addFood.trim();
+    if (!name || !food) { showToast("Enter truck name and food type."); return; }
+    if (!addPin) { showToast("Set a location first (drop a pin or use your location)."); return; }
+    setAddSaving(true);
+    const scheduleOpen = isOpenBySchedule(addHours);
+    await onAddTruck({ name, food, open: scheduleOpen !== null ? scheduleOpen : true, isPermanent: addPermanent, hours: addHours, lat: addPin[0], lng: addPin[1] });
+    setAddName(""); setAddFood(""); setAddPermanent(false); setAddHours(""); setAddPin(null);
+    setAddSaving(false);
+    setShowAddForm(false);
+  }
+
+  const [backfilling, setBackfilling] = useState(false);
+
+  async function handleBackfill() {
+    const missing = trucks.filter(t => !t.city || !t.state);
+    if (missing.length === 0) { showToast("All trucks already have city/state."); return; }
+    setBackfilling(true);
+    let count = 0;
+    for (const t of missing) {
+      const geo = await reverseGeocode(t.position[0], t.position[1]);
+      if (geo.city || geo.state) {
+        await supabase.from("trucks").update({
+          ...(geo.street ? { street: geo.street } : {}),
+          ...(geo.city ? { city: geo.city } : {}),
+          ...(geo.state ? { state: geo.state } : {}),
+        }).eq("id", t.id);
+        count++;
+      }
+      await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit
+    }
+    showToast(`Backfilled ${count} of ${missing.length} trucks. Reload to see updates.`);
+    setBackfilling(false);
+  }
+
+  const filtered = useMemo(() => {
+    if (filter === "pending") return trucks.filter(t => !t.isApproved);
+    if (filter === "hidden") return trucks.filter(t => t.isHidden);
+    if (filter === "unverified") return trucks.filter(t => !t.isVerified && !t.isHidden);
+    if (filter === "expired") return trucks.filter(t => isTruckExpired(t));
+    return trucks;
+  }, [trucks, filter]);
+
+  const grouped = useMemo(() => {
+    const groups = {};
+    filtered.forEach(t => {
+      const key = t.city && t.state ? `${t.city}, ${t.state}` : t.state || "Unknown Location";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
+
+  const missingCount = trucks.filter(t => !t.city || !t.state).length;
+
+  return (
+    <div className="admin-panel">
+      <div className="admin-bar">
+        <span className="admin-bar-title">🔐 Admin Mode</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-admin-logout" style={{ background: "var(--cyan)", color: "#fff", borderColor: "var(--cyan)" }} onClick={() => setShowAddForm(f => !f)}>+ Add Truck</button>
+          {missingCount > 0 && (
+            <button className="btn-admin-logout" onClick={handleBackfill} disabled={backfilling}>
+              {backfilling ? "Backfilling…" : `Backfill (${missingCount})`}
+            </button>
+          )}
+          <button className="btn-admin-logout" onClick={onLogout}>Logout</button>
+        </div>
+      </div>
+
+      <AdminMap
+        trucks={filtered}
+        focusRequest={adminFocusRequest}
+        addMode={showAddForm}
+        editMode={editingId !== null}
+        addPin={editingId ? editPin : addPin}
+        onPickLocation={pos => {
+          if (editingId) { setEditPin(pos); showToast("Pin moved!"); }
+          else { setAddPin(pos); showToast("Pin dropped!"); }
+        }}
+      />
+
+      {showAddForm && (
+        <div className="admin-add-form">
+          <div className="admin-add-title">Add Truck (no limits)</div>
+          <div className="admin-add-grid">
+            <input className="add-input" placeholder="Truck name" value={addName} maxLength={MAX_NAME_LENGTH} onChange={e => setAddName(e.target.value)} />
+            <input className="add-input" placeholder="Food type" value={addFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setAddFood(e.target.value)} />
+          </div>
+          <div className="admin-add-location">
+            <div className="admin-add-location-label">Location:</div>
+            <form onSubmit={handleAdminSearch} className="admin-search-row">
+              <input className="add-input" placeholder="Search city, address, or ZIP…" value={addSearch} onChange={e => setAddSearch(e.target.value)} style={{ flex: 1 }} />
+              <button type="submit" className="btn-admin-action verify" disabled={addSearching}>{addSearching ? "…" : "🔍"}</button>
+            </form>
+            <div className="admin-btn-row">
+              <button className="btn-admin-action verify" onClick={handleAdminUseLocation} disabled={addLocLoading}>
+                {addLocLoading ? "Getting location…" : "📍 Use my location"}
+              </button>
+            </div>
+            {addPin && <div className="admin-pin-status">✅ Pin at {addPin[0].toFixed(4)}, {addPin[1].toFixed(4)}</div>}
+          </div>
+          <label className="checkbox-row" style={{ margin: "10px 0" }}>
+            <input type="checkbox" checked={addPermanent} onChange={e => setAddPermanent(e.target.checked)} />
+            <span className="checkbox-label">📌 Permanent spot</span>
+          </label>
+          <div className="admin-add-location-label">Operating Hours:</div>
+          <ScheduleInput value={addHours} onChange={setAddHours} />
+          <div className="admin-btn-row" style={{ marginTop: 12 }}>
+            <button className="btn-admin-action verify" onClick={handleAdminAdd} disabled={addSaving}>{addSaving ? "Saving…" : "Add Truck"}</button>
+            <button className="btn-admin-action" onClick={() => { setShowAddForm(false); setAddPin(null); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="admin-filters">
+        <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
+        <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>Pending ({trucks.filter(t => !t.isApproved).length})</button>
+        <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({trucks.filter(t => t.isHidden).length})</button>
+        <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({trucks.filter(t => !t.isVerified && !t.isHidden).length})</button>
+        <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired ({trucks.filter(t => isTruckExpired(t)).length})</button>
+      </div>
+
+      <div className="admin-truck-list">
+        {filtered.length === 0 && <div className="comments-empty">No trucks match this filter.</div>}
+        {grouped.map(([location, locationTrucks]) => (
+          <div key={location} className="admin-group">
+            <div className="admin-group-header">{location} ({locationTrucks.length})</div>
+            {locationTrucks.map(truck => (
+          <div key={truck.id} className={`admin-truck-row ${truck.isHidden ? "admin-hidden" : ""}`}>
+            <div className="admin-truck-main" onClick={() => { setExpandedTruck(e => e === truck.id ? null : truck.id); setAdminFocusRequest(prev => ({ id: truck.id, seq: (prev?.seq ?? 0) + 1 })); }}>
+              <span className="admin-truck-emoji">{getFoodEmoji(truck.foodType)}</span>
+              <div className="admin-truck-info">
+                <div className="admin-truck-name">
+                  {truck.name}
+                  {truck.isVerified && <span className="admin-badge verified">Verified</span>}
+                  {!truck.isApproved && <span className="admin-badge pending">Pending</span>}
+                  {truck.isHidden && <span className="admin-badge hidden">Hidden</span>}
+                </div>
+                <div className="admin-truck-meta">
+                  {truck.foodType} · {truck.open ? "Open" : "Closed"} · {truck.votes} votes · {timeAgo(truck.createdAt)}
+                </div>
+              </div>
+              <span className="admin-expand-icon">{expandedTruck === truck.id ? "▲" : "▼"}</span>
+            </div>
+
+            {expandedTruck === truck.id && (
+              <div className="admin-truck-actions">
+                {editingId === truck.id ? (
+                  <div className="admin-edit-form">
+                    <div className="admin-add-grid">
+                      <input className="add-input" value={editName} maxLength={MAX_NAME_LENGTH} onChange={e => setEditName(e.target.value)} placeholder="Truck name" />
+                      <input className="add-input" value={editFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setEditFood(e.target.value)} placeholder="Food type" />
+                    </div>
+                    <label className="checkbox-row" style={{ margin: "8px 0" }}>
+                      <input type="checkbox" checked={editPermanent} onChange={e => setEditPermanent(e.target.checked)} />
+                      <span className="checkbox-label">📌 Permanent spot</span>
+                    </label>
+                    <div className="admin-add-location-label">Operating Hours:</div>
+                    <ScheduleInput value={editHours} onChange={setEditHours} />
+                    <div className="admin-add-location-label" style={{ marginTop: 10 }}>Location:</div>
+                    <div className="admin-pin-status">
+                      📍 {editPin[0].toFixed(4)}, {editPin[1].toFixed(4)}
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginLeft: 8 }}>Click the map above to move</span>
+                    </div>
+                    <div className="admin-btn-row" style={{ marginTop: 10 }}>
+                      <button className="btn-admin-action verify" onClick={saveEdit}>Save</button>
+                      <button className="btn-admin-action" onClick={() => setEditingId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="admin-btn-row">
+                    {!truck.isApproved && <button className="btn-admin-action verify" onClick={() => onApprove(truck.id)}>✅ Approve</button>}
+                    {!truck.isApproved && <button className="btn-admin-action delete" onClick={() => onReject(truck.id)}>❌ Reject</button>}
+                    <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
+                      {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
+                    </button>
+                    <button className="btn-admin-action" onClick={() => startEdit(truck)}>✏️ Edit</button>
+                    <button className={`btn-admin-action ${truck.isHidden ? "restore" : "hide"}`} onClick={() => onToggleHide(truck.id, truck.isHidden)}>
+                      {truck.isHidden ? "👁 Restore" : "🚫 Hide"}
+                    </button>
+                    <button className="btn-admin-action delete" onClick={() => { if (window.confirm(`Permanently delete "${truck.name}"? This cannot be undone.`)) onDeleteTruck(truck.id); }}>
+                      🗑 Delete
+                    </button>
+                    {!truck.isPermanent && <button className="btn-admin-action restore" onClick={() => onReconfirm(truck.id)}>🔄 Re-confirm</button>}
+                  </div>
+                )}
+                <div className="admin-truck-detail">
+                  <span>ID: {truck.id}</span>
+                  <span>User: {truck.userId?.slice(0, 8)}…</span>
+                  <span>Coords: {truck.position[0].toFixed(4)}, {truck.position[1].toFixed(4)}</span>
+                </div>
+                <AdminComments truckId={truck.id} onHide={onHideComment} onUnhide={onUnhideComment} onDelete={onDeleteComment} />
+              </div>
+            )}
+          </div>
+        ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
+  const [comments, setComments] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase.from("comments").select("id, body, created_at, user_id, votes, is_hidden").eq("truck_id", truckId).limit(50)
+      .then(({ data }) => { if (data) setComments(data); setLoaded(true); });
+  }, [truckId]);
+
+  if (!loaded) return <div className="comments-empty">Loading comments…</div>;
+  if (comments.length === 0) return <div className="comments-empty">No comments.</div>;
+
+  return (
+    <div className="admin-comments">
+      <div className="admin-comments-title">Comments ({comments.length})</div>
+      {comments.map(c => (
+        <div key={c.id} className={`admin-comment-row ${c.is_hidden ? "admin-hidden" : ""}`}>
+          <div className="admin-comment-body">
+            {c.is_hidden && <span className="admin-badge hidden">Hidden</span>}
+            {c.body}
+          </div>
+          <div className="admin-comment-meta">
+            {c.votes} votes · {timeAgo(c.created_at)} · {c.user_id?.slice(0, 8)}…
+          </div>
+          <div className="admin-btn-row">
+            {c.is_hidden ? (
+              <button className="btn-admin-action restore" onClick={async () => {
+                const ok = await onUnhide(c.id);
+                if (ok) setComments(cur => cur.map(x => x.id === c.id ? { ...x, is_hidden: false } : x));
+              }}>👁 Unhide</button>
+            ) : (
+              <button className="btn-admin-action hide" onClick={async () => {
+                const ok = await onHide(c.id);
+                if (ok) setComments(cur => cur.map(x => x.id === c.id ? { ...x, is_hidden: true } : x));
+              }}>🚫 Hide</button>
+            )}
+            <button className="btn-admin-action delete" onClick={async () => {
+              const ok = await onDelete(c.id);
+              if (ok) setComments(cur => cur.filter(x => x.id !== c.id));
+            }}>🗑 Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
