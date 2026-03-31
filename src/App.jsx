@@ -336,8 +336,10 @@ function MapBoundsTracker({ onBoundsChange }) {
 
 function FocusTruck({ trucks, focusRequest, markerRefs, zoom = 15 }) {
   const map = useMap();
+  const lastSeqRef = useRef(null);
   useEffect(() => {
-    if (!focusRequest) return;
+    if (!focusRequest || focusRequest.seq === lastSeqRef.current) return;
+    lastSeqRef.current = focusRequest.seq;
     const truck = trucks.find(t => t.id === focusRequest.id);
     if (!truck) return;
     map.stop();
