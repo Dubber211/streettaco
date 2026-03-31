@@ -173,6 +173,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
   const [sortBy, setSortBy] = useState("distance");
+  const [searchText, setSearchText] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [openCommentsId, setOpenCommentsId] = useState(null);
   const [openVoteId, setOpenVoteId] = useState(null);
@@ -226,18 +227,27 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
 
   const displayed = useMemo(() => {
     let list = visibleTrucks;
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      list = list.filter(t => t.name.toLowerCase().includes(q) || t.foodType.toLowerCase().includes(q) || (t.street && t.street.toLowerCase().includes(q)));
+    }
     if (showFavoritesOnly) list = list.filter(t => favorites.includes(t.id));
     if (showOpenOnly) list = list.filter(t => t.open);
     if (activeFoodFilter) list = list.filter(t => t.foodType === activeFoodFilter);
     if (sortBy === "votes") list = [...list].sort((a, b) => b.votes - a.votes);
     return list;
-  }, [visibleTrucks, showOpenOnly, showFavoritesOnly, favorites, activeFoodFilter, sortBy]);
+  }, [visibleTrucks, searchText, showOpenOnly, showFavoritesOnly, favorites, activeFoodFilter, sortBy]);
 
   return (
     <div className="list-section">
       <div className="list-header">
         <span className="list-title">Nearby Trucks</span>
         <span className="list-count">{displayed.length} found</span>
+      </div>
+
+      <div className="list-search">
+        <input className="list-search-input" type="text" placeholder="Search trucks…" value={searchText} onChange={e => setSearchText(e.target.value)} />
+        {searchText && <button className="list-search-clear" onClick={() => setSearchText("")}>✕</button>}
       </div>
 
       <div className="list-filters">

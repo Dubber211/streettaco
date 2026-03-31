@@ -19,7 +19,7 @@ import { useLocalStorageState } from "./hooks";
 
 import { AdminLoginModal, AdminPanel } from "./components/Admin";
 import { ProximityPrompt, OnboardingOverlay } from "./components/Overlays";
-import { Header, ControlsBar, ToastContainer, AddTruckPanel } from "./components/Layout";
+import { Header, ControlsBar, ToastContainer, AddTruckPanel, SettingsPanel } from "./components/Layout";
 import { TruckMap } from "./components/TruckMap";
 import { TruckList } from "./components/TruckList";
 
@@ -61,6 +61,7 @@ function App() {
   const [focusRequest, setFocusRequest] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [adminView, setAdminView] = useState(false);
   const recentAdds = addHistory.filter(ts => hoursSince(ts) < 24);
   const canAdd = recentAdds.length < MAX_TRUCKS_PER_DAY;
@@ -505,6 +506,15 @@ function App() {
     <>
       {showAdminLogin && <AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
       {!onboardingDone && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} />}
+      {showSettings && (
+        <SettingsPanel
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onClose={() => setShowSettings(false)}
+          onShowEula={() => { setShowSettings(false); setOnboardingDone(false); }}
+          onShowOnboarding={() => { setShowSettings(false); setOnboardingDone(false); }}
+        />
+      )}
 
       <ToastContainer toasts={toasts} />
       {adminView ? (
@@ -526,7 +536,7 @@ function App() {
         />
       ) : (
         <div className="app-shell">
-          <Header theme={theme} onToggleTheme={toggleTheme} />
+          <Header theme={theme} onToggleTheme={toggleTheme} onOpenSettings={() => setShowSettings(true)} />
           <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
           <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} onUseMyLocation={handleUseLocationForPin} />
           <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} />

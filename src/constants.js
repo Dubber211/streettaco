@@ -16,6 +16,8 @@ export const STORAGE_KEYS = {
   confirmHistory: "street-taco-confirm-history",
   reportHistory: "street-taco-report-history",
   eulaAccepted: "street-taco-eula-accepted",
+  notifyNewTrucks: "street-taco-notify-new",
+  notifyFavorites: "street-taco-notify-favorites",
 };
 
 export const MAX_NAME_LENGTH = 40;
