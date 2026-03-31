@@ -3325,7 +3325,7 @@ function App() {
     setUserId(data?.user?.id || null);
     setIsAdmin(false);
     setAdminView(false);
-    document.title = "Street Taco App";
+    document.title = "StreetTaco";
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#06b6d4");
     document.querySelector('link[rel="manifest"]')?.setAttribute("href", "/manifest.json");
     const { data: truckRows } = await supabase.from("trucks").select("*");
