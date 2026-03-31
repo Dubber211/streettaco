@@ -577,13 +577,9 @@ const css = `
     gap: 14px;
   }
 
-  .logo-icon {
+  .logo-icon-img {
     width: 54px; height: 54px;
-    background: linear-gradient(135deg, #06b6d4, #0891b2);
-    border-radius: 16px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 26px;
-    box-shadow: 0 8px 24px var(--cyan-glow);
+    object-fit: contain;
     flex-shrink: 0;
   }
 
@@ -1469,7 +1465,7 @@ const css = `
     /* Header */
     .header { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 16px; }
     .header-logo { gap: 10px; }
-    .logo-icon { width: 44px; height: 44px; font-size: 22px; border-radius: 12px; }
+    .logo-icon-img { width: 44px; height: 44px; }
     .logo-text h1 { font-size: 1.5rem; }
     .logo-text p { font-size: 0.8rem; }
     .btn-add-truck { justify-content: center; padding: 14px 20px; font-size: 1rem; }
@@ -2445,7 +2441,7 @@ function Header({ theme, onToggleTheme }) {
   return (
     <div className="header">
       <div className="header-logo">
-        <div className="logo-icon">🚚</div>
+        <img className="logo-icon-img" src="/logo.png" alt="StreetTaco" />
         <div className="logo-text">
           <h1>StreetTaco</h1>
           <p>Find food trucks near you • Community powered</p>
