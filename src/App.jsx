@@ -275,7 +275,7 @@ function timeAgo(ts) {
   const days = Math.floor(hrs / 24);
   return `${days} day${days !== 1 ? "s" : ""} ago`;
 }
-function isTruckExpired(t) { return t.isPermanent ? false : hoursSince(t.lastConfirmedAt || t.createdAt) > MOBILE_TRUCK_EXPIRATION_HOURS; }
+function isTruckExpired(t) { return t.isPermanent || t.isVerified ? false : hoursSince(t.lastConfirmedAt || t.createdAt) > MOBILE_TRUCK_EXPIRATION_HOURS; }
 function normalizeTruck(t) { const c = t.createdAt || nowIso(); return { ...t, isPermanent: Boolean(t.isPermanent), hours: t.hours || "", createdAt: c, lastConfirmedAt: t.lastConfirmedAt || c }; }
 
 /* ─── Map Sub-Components ────────────────────────────────────────────────────── */
@@ -334,16 +334,16 @@ function MapBoundsTracker({ onBoundsChange }) {
   return null;
 }
 
-function FocusTruck({ trucks, focusRequest, markerRefs }) {
+function FocusTruck({ trucks, focusRequest, markerRefs, zoom = 15 }) {
   const map = useMap();
   useEffect(() => {
     if (!focusRequest) return;
     const truck = trucks.find(t => t.id === focusRequest.id);
     if (!truck) return;
-    map.flyTo(truck.position, 15, { animate: true, duration: 0.6 });
+    map.flyTo(truck.position, zoom, { animate: true, duration: 0.6 });
     const timer = setTimeout(() => { markerRefs.current[focusRequest.id]?.openPopup(); }, 700);
     return () => clearTimeout(timer);
-  }, [focusRequest, trucks, map, markerRefs]);
+  }, [focusRequest, trucks, map, markerRefs, zoom]);
   return null;
 }
 
@@ -402,6 +402,67 @@ function AdminMapCenter({ center }) {
   const map = useMap();
   useEffect(() => { if (center) map.setView(center, 16, { animate: true }); }, [center, map]);
   return null;
+}
+
+function FitBoundsToTrucks({ trucks }) {
+  const map = useMap();
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    if (fittedRef.current || trucks.length === 0) return;
+    fittedRef.current = true;
+    const bounds = L.latLngBounds(trucks.map(t => t.position));
+    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+  }, [trucks, map]);
+  return null;
+}
+
+function AdminMap({ trucks, focusRequest, addMode, editMode, addPin, onPickLocation }) {
+  const markerRefs = useRef({});
+
+  return (
+    <div className="admin-map-wrapper">
+      {(addMode || editMode) && <div className="admin-map-hint">📍 Click the map to {editMode ? "move the pin" : "drop a pin"}</div>}
+      <MapContainer center={DEFAULT_CENTER} zoom={5} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+        <TileLayer url={TILE_LIGHT} attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
+        <FitBoundsToTrucks trucks={trucks} />
+        <FocusTruck trucks={trucks} focusRequest={focusRequest} markerRefs={markerRefs} zoom={16} />
+        {(addMode || editMode) && <AdminMapClick onPick={onPickLocation} />}
+        {addPin && <AdminMapCenter center={addPin} />}
+        {addPin && <Marker position={addPin} icon={adminPinIcon} />}
+        {trucks.map(truck => {
+          const icon = makeTruckIcon(truck.foodType, truck.open);
+          return (
+            <Marker key={truck.id} ref={el => { if (el) markerRefs.current[truck.id] = el; }} position={truck.position} icon={icon} opacity={truck.isHidden ? 0.4 : 1}>
+              <Popup>
+                <div className="popup-card">
+                  <div className="popup-header">
+                    <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
+                    <div>
+                      <div className="popup-name">
+                        {truck.name}
+                        {truck.isVerified && <span> ✅</span>}
+                        {truck.isHidden && <span style={{ color: "#ef4444" }}> [Hidden]</span>}
+                      </div>
+                      <div className="popup-type">{truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}</div>
+                    </div>
+                  </div>
+                  <div className="popup-badges">
+                    <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`}>{truck.open ? "● Open" : "○ Closed"}</span>
+                    <span className={`badge ${truck.isPermanent ? "badge-perm" : "badge-mobile"}`}>{truck.isPermanent ? "📌 Permanent" : "🚚 Mobile"}</span>
+                  </div>
+                  <div className="popup-meta">
+                    <span>⭐ {truck.votes} votes</span>
+                    {truck.hours && <span>⏰ {formatSchedule(truck.hours)}</span>}
+                    {truck.city && truck.state && <span>📍 {truck.city}, {truck.state}</span>}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+    </div>
+  );
 }
 
 /* ─── Styles ────────────────────────────────────────────────────────────────── */
@@ -536,9 +597,9 @@ const css = `
     color: #fff;
     border: none;
     border-radius: var(--radius-md);
-    padding: 13px 20px;
+    padding: 9px 14px;
     font-family: var(--font-display);
-    font-size: 0.95rem;
+    font-size: 0.82rem;
     font-weight: 700;
     letter-spacing: 0.01em;
     cursor: pointer;
@@ -768,7 +829,7 @@ const css = `
 
   .proximity-prompt {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    background: var(--surface1); border: 1px solid var(--cyan); border-radius: 14px;
+    background: var(--bg); border: 1px solid var(--cyan); border-radius: 14px;
     padding: 14px 18px; display: flex; align-items: center; gap: 12px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 1000; max-width: 90vw;
     animation: slideUp 0.3s ease-out;
@@ -919,9 +980,19 @@ const css = `
     overflow: hidden;
     border: 1px solid var(--border);
     margin-bottom: 20px;
-    height: 500px;
+    height: 575px;
     position: relative;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .map-radius-overlay {
+    position: absolute; bottom: 12px; left: 12px; z-index: 1000;
+  }
+  .map-radius-overlay select {
+    background: var(--surface1); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 8px; font-size: 0.72rem; font-weight: 600;
+    cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    appearance: auto;
   }
 
   .map-wrapper.add-mode-active { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-glow), 0 8px 32px rgba(0,0,0,0.4); }
@@ -1146,8 +1217,8 @@ const css = `
     text-overflow: ellipsis;
   }
 
-  .truck-card-sub .open-tag { color: #4ade80; }
-  .truck-card-sub .closed-tag { color: var(--text-dim); }
+  .open-tag { color: #4ade80; font-size: 0.7rem; font-weight: 600; }
+  .closed-tag { color: var(--text-dim); font-size: 0.7rem; font-weight: 600; }
 
   .truck-card-hours { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
 
@@ -1398,6 +1469,9 @@ const css = `
   /* ── Share / Comment icon buttons ── */
   .icon-btn-share { background: rgba(6,182,212,0.12); color: #22d3ee; }
   .icon-btn-share:hover:not(:disabled) { background: rgba(6,182,212,0.25); }
+  .icon-btn-nav { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .icon-btn-nav:hover:not(:disabled) { background: rgba(34,197,94,0.25); }
+  .btn-vote-nav { background: rgba(34,197,94,0.15); color: #4ade80; border-color: rgba(34,197,94,0.3); }
   .icon-btn-comment { background: rgba(148,163,184,0.12); color: #94a3b8; position: relative; }
   .icon-btn-comment:hover:not(:disabled) { background: rgba(148,163,184,0.22); }
   .icon-btn-comment.active { background: rgba(6,182,212,0.15); color: var(--cyan); }
@@ -1550,6 +1624,21 @@ const css = `
 
   .admin-group { margin-bottom: 20px; }
   .admin-group-header { font-family: var(--font-display); font-size: 1rem; font-weight: 800; color: var(--cyan); padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+
+  .admin-map-wrapper { height: 400px; border-bottom: 1px solid var(--border); position: relative; margin: 0 16px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+  .admin-map-hint {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1000;
+    background: var(--cyan); color: #fff; padding: 6px 16px; border-radius: 20px;
+    font-size: 0.82rem; font-weight: 600; box-shadow: 0 2px 12px rgba(6,182,212,0.4);
+    pointer-events: none;
+  }
+  .btn-admin-map-focus {
+    background: none; border: none; cursor: pointer; font-size: 1rem;
+    padding: 4px 8px; border-radius: 6px; transition: background 0.15s;
+  }
+  .btn-admin-map-focus:hover { background: var(--surface3); }
+
+  .admin-edit-form { padding: 4px 0 8px; }
 
   .admin-add-form { padding: 16px 20px; background: var(--surface1); border-bottom: 1px solid var(--border); }
   .admin-add-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 12px; }
@@ -1726,6 +1815,7 @@ const ONBOARDING_STEPS = [
   { type: "spotlight", icon: "📍", title: "Spot a truck?", body: "Tap this to drop a pin and share a food truck you found with the community.", target: ".map-add-truck-overlay", position: "bottom-left" },
   { type: "spotlight", icon: "🔍", title: "Find your area", body: "Use your location or type in a city/ZIP to jump to the right spot on the map.", target: ".controls-bar", position: "bottom" },
   { type: "spotlight", icon: "🗳️", title: "Vote & comment", body: "Each truck card shows votes, comments, and status. Tap to interact.", target: ".list-section", position: "top" },
+  { type: "modal", icon: "🧭", title: "Get directions", body: "Tap the compass icon on any truck to open navigation in Google Maps or Apple Maps. We'll take you right to it!" },
   { type: "eula", icon: "📜", title: "End User License Agreement", body: "" },
   { type: "modal", icon: "🌮", title: "You're all set!", body: "Start exploring, add trucks you find, and help your community eat well." },
 ];
@@ -1766,9 +1856,10 @@ function AdminLoginModal({ onLogin, onClose }) {
 }
 
 /* ─── Admin Panel ──────────────────────────────────────────────────────────── */
-function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onAddTruck, onLogout, showToast }) {
+function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onEditTruck, onReconfirm, onAddTruck, onLogout, showToast }) {
   const [filter, setFilter] = useState("all");
   const [expandedTruck, setExpandedTruck] = useState(null);
+  const [adminFocusRequest, setAdminFocusRequest] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addName, setAddName] = useState("");
   const [addFood, setAddFood] = useState("");
@@ -1777,6 +1868,36 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
   const [addHours, setAddHours] = useState("");
   const [addPin, setAddPin] = useState(null);
   const [addSaving, setAddSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editFood, setEditFood] = useState("");
+  const [editOpen, setEditOpen] = useState(true);
+  const [editHours, setEditHours] = useState("");
+  const [editPermanent, setEditPermanent] = useState(false);
+  const [editPin, setEditPin] = useState(null);
+
+  function startEdit(truck) {
+    setEditingId(truck.id);
+    setEditName(truck.name);
+    setEditFood(truck.foodType);
+    setEditOpen(truck.open);
+    setEditHours(truck.hours || "");
+    setEditPermanent(truck.isPermanent);
+    setEditPin(truck.position);
+  }
+
+  function saveEdit() {
+    const name = editName.trim(), foodType = editFood.trim();
+    if (!name || !foodType) return;
+    if (!editPin) return;
+    const scheduleOpen = isOpenBySchedule(editHours);
+    onEditTruck(editingId, {
+      name, foodType, open: scheduleOpen !== null ? scheduleOpen : editOpen,
+      hours: editHours, isPermanent: editPermanent,
+      lat: editPin[0], lng: editPin[1],
+    });
+    setEditingId(null);
+  }
   const [addLocLoading, setAddLocLoading] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [addSearching, setAddSearching] = useState(false);
@@ -1855,6 +1976,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
   const filtered = useMemo(() => {
     if (filter === "hidden") return trucks.filter(t => t.isHidden);
     if (filter === "unverified") return trucks.filter(t => !t.isVerified && !t.isHidden);
+    if (filter === "expired") return trucks.filter(t => isTruckExpired(t));
     return trucks;
   }, [trucks, filter]);
 
@@ -1885,6 +2007,18 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
         </div>
       </div>
 
+      <AdminMap
+        trucks={filtered}
+        focusRequest={adminFocusRequest}
+        addMode={showAddForm}
+        editMode={editingId !== null}
+        addPin={editingId ? editPin : addPin}
+        onPickLocation={pos => {
+          if (editingId) { setEditPin(pos); showToast("Pin moved!"); }
+          else { setAddPin(pos); showToast("Pin dropped!"); }
+        }}
+      />
+
       {showAddForm && (
         <div className="admin-add-form">
           <div className="admin-add-title">Add Truck (no limits)</div>
@@ -1902,17 +2036,8 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
               <button className="btn-admin-action verify" onClick={handleAdminUseLocation} disabled={addLocLoading}>
                 {addLocLoading ? "Getting location…" : "📍 Use my location"}
               </button>
-              <button className="btn-admin-action" onClick={() => setAddPin(null)}>Drop pin on map ↓</button>
             </div>
             {addPin && <div className="admin-pin-status">✅ Pin at {addPin[0].toFixed(4)}, {addPin[1].toFixed(4)}</div>}
-          </div>
-          <div className="admin-add-map-wrapper">
-            <MapContainer center={addPin || [41.6764, -86.252]} zoom={16} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
-              <TileLayer url={TILE_LIGHT} attribution='&copy; <a href="https://carto.com/">CARTO</a>' />
-              <AdminMapClick onPick={pos => { setAddPin(pos); showToast("Pin dropped!"); }} />
-              <AdminMapCenter center={addPin} />
-              {addPin && <Marker position={addPin} icon={adminPinIcon} />}
-            </MapContainer>
           </div>
           <label className="checkbox-row" style={{ margin: "10px 0" }}>
             <input type="checkbox" checked={addPermanent} onChange={e => setAddPermanent(e.target.checked)} />
@@ -1931,6 +2056,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
         <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
         <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({trucks.filter(t => t.isHidden).length})</button>
         <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({trucks.filter(t => !t.isVerified && !t.isHidden).length})</button>
+        <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired ({trucks.filter(t => isTruckExpired(t)).length})</button>
       </div>
 
       <div className="admin-truck-list">
@@ -1940,7 +2066,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
             <div className="admin-group-header">{location} ({locationTrucks.length})</div>
             {locationTrucks.map(truck => (
           <div key={truck.id} className={`admin-truck-row ${truck.isHidden ? "admin-hidden" : ""}`}>
-            <div className="admin-truck-main" onClick={() => setExpandedTruck(e => e === truck.id ? null : truck.id)}>
+            <div className="admin-truck-main" onClick={() => { setExpandedTruck(e => e === truck.id ? null : truck.id); setAdminFocusRequest(prev => ({ id: truck.id, seq: (prev?.seq ?? 0) + 1 })); }}>
               <span className="admin-truck-emoji">{getFoodEmoji(truck.foodType)}</span>
               <div className="admin-truck-info">
                 <div className="admin-truck-name">
@@ -1957,17 +2083,43 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
 
             {expandedTruck === truck.id && (
               <div className="admin-truck-actions">
-                <div className="admin-btn-row">
-                  <button className={`btn-admin-action ${truck.isHidden ? "restore" : "hide"}`} onClick={() => onToggleHide(truck.id, truck.isHidden)}>
-                    {truck.isHidden ? "👁 Restore" : "🚫 Hide"}
-                  </button>
-                  <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
-                    {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
-                  </button>
-                  <button className="btn-admin-action delete" onClick={() => { if (window.confirm(`Permanently delete "${truck.name}"? This cannot be undone.`)) onDeleteTruck(truck.id); }}>
-                    🗑 Delete
-                  </button>
-                </div>
+                {editingId === truck.id ? (
+                  <div className="admin-edit-form">
+                    <div className="admin-add-grid">
+                      <input className="add-input" value={editName} maxLength={MAX_NAME_LENGTH} onChange={e => setEditName(e.target.value)} placeholder="Truck name" />
+                      <input className="add-input" value={editFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setEditFood(e.target.value)} placeholder="Food type" />
+                    </div>
+                    <label className="checkbox-row" style={{ margin: "8px 0" }}>
+                      <input type="checkbox" checked={editPermanent} onChange={e => setEditPermanent(e.target.checked)} />
+                      <span className="checkbox-label">📌 Permanent spot</span>
+                    </label>
+                    <div className="admin-add-location-label">Operating Hours:</div>
+                    <ScheduleInput value={editHours} onChange={setEditHours} />
+                    <div className="admin-add-location-label" style={{ marginTop: 10 }}>Location:</div>
+                    <div className="admin-pin-status">
+                      📍 {editPin[0].toFixed(4)}, {editPin[1].toFixed(4)}
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginLeft: 8 }}>Click the map above to move</span>
+                    </div>
+                    <div className="admin-btn-row" style={{ marginTop: 10 }}>
+                      <button className="btn-admin-action verify" onClick={saveEdit}>Save</button>
+                      <button className="btn-admin-action" onClick={() => setEditingId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="admin-btn-row">
+                    <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
+                      {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
+                    </button>
+                    <button className="btn-admin-action" onClick={() => startEdit(truck)}>✏️ Edit</button>
+                    <button className={`btn-admin-action ${truck.isHidden ? "restore" : "hide"}`} onClick={() => onToggleHide(truck.id, truck.isHidden)}>
+                      {truck.isHidden ? "👁 Restore" : "🚫 Hide"}
+                    </button>
+                    <button className="btn-admin-action delete" onClick={() => { if (window.confirm(`Permanently delete "${truck.name}"? This cannot be undone.`)) onDeleteTruck(truck.id); }}>
+                      🗑 Delete
+                    </button>
+                    {!truck.isPermanent && <button className="btn-admin-action restore" onClick={() => onReconfirm(truck.id)}>🔄 Re-confirm</button>}
+                  </div>
+                )}
                 <div className="admin-truck-detail">
                   <span>ID: {truck.id}</span>
                   <span>User: {truck.userId?.slice(0, 8)}…</span>
@@ -2272,12 +2424,6 @@ function ControlsBar({ searchText, setSearchText, radiusMiles, setRadiusMiles, o
         <button className="btn-go" type="submit">Go →</button>
       </form>
 
-      <div className="radius-selector">
-        <span>📏</span>
-        <select value={radiusMiles} onChange={e => setRadiusMiles(Number(e.target.value))}>
-          {RADIUS_OPTIONS.map(r => <option key={r} value={r}>{r} mi</option>)}
-        </select>
-      </div>
     </div>
   );
 }
@@ -2380,6 +2526,11 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
         </div>
       )}
       {addMode && <div className="add-mode-overlay">📍 Tap the map to drop a pin</div>}
+      <div className="map-radius-overlay">
+        <select value={radiusMiles} onChange={e => onRadiusChange(Number(e.target.value))}>
+          {RADIUS_OPTIONS.map(r => <option key={r} value={r}>{r} mi</option>)}
+        </select>
+      </div>
       <MapContainer center={mapCenter} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
         <TileLayer
           key={theme}
@@ -2440,6 +2591,9 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
                     </button>
                     <button className={`btn-vote btn-vote-down ${down ? "voted" : ""}`} onClick={() => onVote(truck.id, -1)} disabled={down}>
                       😞
+                    </button>
+                    <button className="btn-vote btn-vote-nav" onClick={() => window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank")}>
+                      🧭
                     </button>
                   </div>
                 </div>
@@ -2631,7 +2785,7 @@ function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, onAdminDe
 }
 
 function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment, onFindNearest }) {
-  const [showOpenOnly, setShowOpenOnly] = useState(false);
+  const [showOpenOnly, setShowOpenOnly] = useState(true);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
   const [sortBy, setSortBy] = useState("distance");
@@ -2764,10 +2918,9 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                   {getFoodEmoji(truck.foodType)}
                 </div>
                 <div className="truck-card-info">
-                  <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>}</div>
+                  <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"}>{truck.open ? "Open" : "Closed"}</span></div>
                   <div className="truck-card-sub">
-                    {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType} &nbsp;·&nbsp;
-                    <span className={truck.open ? "open-tag" : "closed-tag"}>{truck.open ? "Open" : "Closed"}</span>
+                    {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}
                     &nbsp;·&nbsp; {truck.distance.toFixed(1)} mi
                   </div>
                   <div className="truck-card-hours">
@@ -2801,6 +2954,7 @@ function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onRep
                   )}
                   <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments">💬{commentCounts[truck.id] ? <span className="comment-count-badge">{commentCounts[truck.id]}</span> : null}</button>
                   <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share">🔗</button>
+                  <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate">🧭</button>
                 </div>
               </div>
               {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}
@@ -3186,6 +3340,37 @@ function App() {
     showToast(`"${name}" added!`);
   }
 
+  async function handleAdminReconfirm(id) {
+    const { error } = await supabase.from("trucks").update({ last_confirmed_at: nowIso() }).eq("id", id);
+    if (error) showToast("Failed to re-confirm.");
+    else {
+      setTrucks(cur => cur.map(t => t.id === id ? { ...t, lastConfirmedAt: nowIso() } : t));
+      showToast("Truck re-confirmed ✅");
+    }
+  }
+
+  async function handleAdminEditTruck(id, updates) {
+    const geo = await reverseGeocode(updates.lat, updates.lng);
+    const { error } = await supabase.from("trucks").update({
+      name: updates.name, food_type: updates.foodType, open: updates.open,
+      hours: updates.hours || "", is_permanent: updates.isPermanent,
+      lat: updates.lat, lng: updates.lng,
+      ...(geo.street ? { street: geo.street } : {}),
+      ...(geo.city ? { city: geo.city } : {}),
+      ...(geo.state ? { state: geo.state } : {}),
+    }).eq("id", id);
+    if (error) showToast("Failed to update truck.");
+    else {
+      setTrucks(cur => cur.map(t => t.id === id ? {
+        ...t, name: updates.name, foodType: updates.foodType, open: updates.open,
+        hours: updates.hours, isPermanent: updates.isPermanent,
+        position: [updates.lat, updates.lng],
+        street: geo.street || t.street, city: geo.city || t.city, state: geo.state || t.state,
+      } : t));
+      showToast("Truck updated ✅");
+    }
+  }
+
   async function handleAdminDeleteTruck(id) {
     const { error } = await supabase.from("trucks").delete().eq("id", id);
     if (error) showToast("Failed to delete truck.");
@@ -3254,6 +3439,8 @@ function App() {
           onUnhideComment={handleAdminUnhideComment}
           onDeleteComment={handleAdminDeleteComment}
           onDeleteTruck={handleAdminDeleteTruck}
+          onEditTruck={handleAdminEditTruck}
+          onReconfirm={handleAdminReconfirm}
           onAddTruck={handleAdminAddTruck}
           onLogout={handleAdminLogout}
           showToast={showToast}
