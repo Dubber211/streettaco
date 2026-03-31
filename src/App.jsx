@@ -621,7 +621,7 @@ const css = `
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1;
-    background: linear-gradient(135deg, #fff 0%, #06b6d4 100%);
+    background: linear-gradient(135deg, var(--text) 0%, #06b6d4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
