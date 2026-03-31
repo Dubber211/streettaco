@@ -22,7 +22,7 @@ import {
 } from "./constants";
 
 import {
-  nowIso, containsProfanity, parseSchedule, isOpenBySchedule,
+  nowIso, containsProfanity, loadBlockedWords, parseSchedule, isOpenBySchedule,
   formatSchedule, reverseGeocode, getFoodEmoji, toAppTruck,
   userLocationIcon, makeTruckIcon, makePendingIcon, adminPinIcon,
   haversineMiles, milesToMeters, hoursSince, timeAgo,
@@ -1443,6 +1443,7 @@ function App() {
   // Auth + initial data load + realtime
   useEffect(() => {
     async function init() {
+      loadBlockedWords();
       const { data: { session } } = await supabase.auth.getSession();
       let uid = session?.user?.id;
       if (!uid) {

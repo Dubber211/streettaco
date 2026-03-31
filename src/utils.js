@@ -1,12 +1,22 @@
 import L from "leaflet";
-import { BLOCKED_WORDS, DAY_LABELS, FOOD_EMOJIS, MOBILE_TRUCK_EXPIRATION_HOURS } from "./constants";
+import { supabase } from "./supabase";
+import { DAY_LABELS, FOOD_EMOJIS, MOBILE_TRUCK_EXPIRATION_HOURS } from "./constants";
 
 export const nowIso = () => new Date().toISOString();
+
+// Blocked words loaded from Supabase, with fallback
+let blockedWordsCache = [];
+
+export async function loadBlockedWords() {
+  const { data } = await supabase.from("blocked_words").select("word");
+  if (data) blockedWordsCache = data.map(r => r.word);
+  return blockedWordsCache;
+}
 
 export function containsProfanity(text) {
   const lower = text.toLowerCase().replace(/[^a-z]/g, " ");
   const words = lower.split(/\s+/);
-  return words.some(w => BLOCKED_WORDS.includes(w));
+  return words.some(w => blockedWordsCache.includes(w));
 }
 
 export function to12h(t) {

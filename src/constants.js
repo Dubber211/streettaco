@@ -28,47 +28,9 @@ export const PROXIMITY_RADIUS_MILES = 0.5;
 
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export const BLOCKED_WORDS = [
-  "ass","asshole","assholes","bastard","bastards","bitch","bitches","bitchy",
-  "blowjob","blowjobs","boner","boob","boobs","bullshit","butt","butthole",
-  "cock","cocks","cocksucker","coon","coons","cum","cumming","cunt","cunts",
-  "damn","damned","damnit","dick","dicks","dickhead","dildo","dildos",
-  "douche","douchebag","dumbass","dyke",
-  "fag","fags","faggot","faggots","felch","fuck","fucked","fucker","fuckers",
-  "fuckface","fucking","fuckoff","fucks","fuckwit",
-  "goddamn","goddamnit","gringo","handjob",
-  "hell","ho","hoe","hooker","hookers","horny","humping",
-  "jackass","jackoff","jerkoff","jizz",
-  "kike","kinky","kkk",
-  "lmao","lmfao",
-  "meth","milf","mofo","motherfucker","motherfuckers","motherfucking",
-  "negro","nigga","niggas","nigger","niggers","nig","nipple","nipples","nutsack",
-  "orgasm","orgy",
-  "paki","pecker","penis","penises","piss","pissed","pissing","porn","porno",
-  "prostitute","prostitutes","pube","pubes","pubic","pussy","pussies",
-  "queer",
-  "rape","raped","raping","rapist","rectum","retard","retarded","rimjob",
-  "schlong","scrotum","semen","sex","sexo","sexy","shit","shits","shithead",
-  "shitty","shitting","skank","skanky","slut","sluts","slutty","smegma",
-  "snatch","spic","spick","spunk","stfu",
-  "testicle","testicles","tit","tits","titties","titty","twat","twats",
-  "vagina","viagra","vulva",
-  "wang","wank","wanker","whore","whores","wtf",
-  "cocaine","coke","crack","crackhead","heroin","heroine","meth","methhead",
-  "amphetamine","amphetamines","molly","ecstasy","mdma","lsd","acid",
-  "shrooms","mushrooms","weed","marijuana","stoner","pothead","blunt","dope",
-  "dopehead","junkie","junkies","oxy","oxycontin","fentanyl","ketamine",
-  "xanax","adderall","percocet","vicodin","codeine","opium","narcotic",
-  "narcotics","druggie","druggies","crackpipe","bong","edibles",
-  "beaner","beaners","chink","chinks","chinky","coolie","darkie","darkies",
-  "gook","gooks","gringo","gringos","gyp","gypsy","halfbreed",
-  "honkey","honky","injun","jap","japs","kike","kikes",
-  "kraut","krauts","limey","mick","micks","muzzie","nazi","nazis",
-  "paki","pakis","polack","polacks","raghead","ragheads","redskin","redskins",
-  "sambo","skinhead","spaz","sperg","squaw","terrorist","terrorists",
-  "towelhead","towelheads","tranny","trannies","Uncle Tom","wetback","wetbacks",
-  "wigger","wiggers","wop","wops","zipperhead",
-];
+// Blocked words are now stored in Supabase (blocked_words table)
+// and enforced server-side via Postgres triggers.
+// Client fetches the list on load for instant UX feedback.
 
 export const FOOD_EMOJIS = {
   tacos: "🌮", taco: "🌮",
