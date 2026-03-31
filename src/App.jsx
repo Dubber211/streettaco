@@ -340,8 +340,9 @@ function FocusTruck({ trucks, focusRequest, markerRefs, zoom = 15 }) {
     if (!focusRequest) return;
     const truck = trucks.find(t => t.id === focusRequest.id);
     if (!truck) return;
-    map.flyTo(truck.position, zoom, { animate: true, duration: 0.6 });
-    const timer = setTimeout(() => { markerRefs.current[focusRequest.id]?.openPopup(); }, 700);
+    map.stop();
+    map.setView(truck.position, zoom, { animate: true, duration: 0.3 });
+    const timer = setTimeout(() => { markerRefs.current[focusRequest.id]?.openPopup(); }, 350);
     return () => clearTimeout(timer);
   }, [focusRequest, trucks, map, markerRefs, zoom]);
   return null;
@@ -3161,7 +3162,6 @@ function App() {
     if (withDist.length === 0) { showToast("No trucks found anywhere yet."); return; }
     withDist.sort((a, b) => a.dist - b.dist);
     const nearest = withDist[0];
-    setMapCenter(nearest.position);
     setFocusRequest(r => ({ id: nearest.id, seq: (r?.seq ?? 0) + 1 }));
     showToast(`Nearest truck: ${nearest.name} (${nearest.dist.toFixed(1)} mi)`);
   }
