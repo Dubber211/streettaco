@@ -327,8 +327,8 @@ function ClosePopupOnDrag() {
   const map = useMap();
   useEffect(() => {
     const close = () => map.closePopup();
-    map.on("dragstart", close);
-    return () => map.off("dragstart", close);
+    map.on("dragstart zoomstart", close);
+    return () => map.off("dragstart zoomstart", close);
   }, [map]);
   return null;
 }
@@ -446,7 +446,7 @@ function AdminMap({ trucks, focusRequest, addMode, editMode, addPin, onPickLocat
           const icon = makeTruckIcon(truck.foodType, truck.open);
           return (
             <Marker key={truck.id} ref={el => { if (el) markerRefs.current[truck.id] = el; }} position={truck.position} icon={icon} opacity={truck.isHidden ? 0.4 : 1}>
-              <Popup>
+              <Popup autoPan={false}>
                 <div className="popup-card">
                   <div className="popup-header">
                     <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
@@ -2558,7 +2558,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
 
         {userLocation && (
           <Marker position={userLocation} icon={userLocationIcon}>
-            <Popup>
+            <Popup autoPan={false}>
               <div className="popup-card">
                 <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "#f1f5f9" }}>You are here</div>
               </div>
@@ -2577,7 +2577,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
 
           return (
             <Marker key={truck.id} ref={el => { if (el) markerRefs.current[truck.id] = el; }} position={truck.position} icon={icon}>
-              <Popup>
+              <Popup autoPan={false}>
                 <div className="popup-card">
                   <div className="popup-header">
                     <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
@@ -2617,7 +2617,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
 
         {pendingPin && (
           <Marker position={pendingPin} icon={pendingIcon}>
-            <Popup>
+            <Popup autoPan={false}>
               <div className="popup-card">
                 <div style={{ color: "#06b6d4", fontWeight: 700, fontFamily: "var(--font-display)" }}>New truck pin</div>
                 <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: 4 }}>Fill in details on the left</div>
