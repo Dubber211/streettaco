@@ -94,53 +94,64 @@ function containsProfanity(text) {
 /* ─── Schedule Helpers ──────────────────────────────────────────────────────── */
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function to12h(t) {
+  const [h, m] = t.split(":").map(Number);
+  const suffix = h >= 12 ? "pm" : "am";
+  const hr = h % 12 || 12;
+  return m ? `${hr}:${String(m).padStart(2, "0")}${suffix}` : `${hr}${suffix}`;
+}
+
 function parseSchedule(hours) {
   if (!hours || typeof hours !== "string") return null;
   try {
     const s = JSON.parse(hours);
-    if (s && s.open && s.close && Array.isArray(s.days)) return s;
+    // Support new multi-block format: [{days, open, close}, ...]
+    if (Array.isArray(s) && s.length && s[0].days) return s;
+    // Support old single-block format: {days, open, close}
+    if (s && s.open && s.close && Array.isArray(s.days)) return [s];
   } catch {}
   return null;
 }
 
 function isOpenBySchedule(hours) {
-  const s = parseSchedule(hours);
-  if (!s) return null; // no schedule — use manual open flag
+  const blocks = parseSchedule(hours);
+  if (!blocks) return null;
   const now = new Date();
   const day = now.getDay();
-  if (!s.days.includes(day)) return false;
   const currentMins = now.getHours() * 60 + now.getMinutes();
-  const [oh, om] = s.open.split(":").map(Number);
-  const [ch, cm] = s.close.split(":").map(Number);
-  const openMins = oh * 60 + (om || 0);
-  const closeMins = ch * 60 + (cm || 0);
-  if (closeMins > openMins) return currentMins >= openMins && currentMins < closeMins;
-  // Overnight: e.g. 22:00 - 02:00
-  return currentMins >= openMins || currentMins < closeMins;
+  for (const b of blocks) {
+    if (!b.days.includes(day)) continue;
+    const [oh, om] = b.open.split(":").map(Number);
+    const [ch, cm] = b.close.split(":").map(Number);
+    const openMins = oh * 60 + (om || 0);
+    const closeMins = ch * 60 + (cm || 0);
+    if (closeMins > openMins) { if (currentMins >= openMins && currentMins < closeMins) return true; }
+    else { if (currentMins >= openMins || currentMins < closeMins) return true; }
+  }
+  return false;
+}
+
+function formatDayRange(sorted) {
+  if (sorted.length === 0) return "";
+  if (sorted.length === 7) return "Every day";
+  // Check for consecutive runs
+  const ranges = [];
+  let start = sorted[0], prev = sorted[0];
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i < sorted.length && sorted[i] === prev + 1) { prev = sorted[i]; continue; }
+    ranges.push(start === prev ? DAY_LABELS[start] : `${DAY_LABELS[start]}–${DAY_LABELS[prev]}`);
+    if (i < sorted.length) { start = sorted[i]; prev = sorted[i]; }
+  }
+  return ranges.join(", ");
 }
 
 function formatSchedule(hours) {
-  const s = parseSchedule(hours);
-  if (!s) return hours || "";
-  const sorted = [...s.days].sort();
-  let dayStr;
-  if (sorted.length === 7) {
-    dayStr = "Every day";
-  } else if (sorted.length >= 5) {
-    const closed = DAY_LABELS.filter((_, i) => !sorted.includes(i));
-    dayStr = `Closed ${closed.join(", ")}`;
-  } else if (sorted.length === 5 && sorted[0] === 1 && sorted[4] === 5) {
-    dayStr = "Mon–Fri";
-  } else {
-    dayStr = sorted.map(d => DAY_LABELS[d]).join(", ");
-  }
-  function to12h(t) {
-    const [h, m] = t.split(":").map(Number);
-    const suffix = h >= 12 ? "pm" : "am";
-    const hr = h % 12 || 12;
-    return m ? `${hr}:${String(m).padStart(2,"0")}${suffix}` : `${hr}${suffix}`;
-  }
-  return `${dayStr} ${to12h(s.open)}–${to12h(s.close)}`;
+  const blocks = parseSchedule(hours);
+  if (!blocks) return hours || "";
+  return blocks.map(b => {
+    const dayStr = formatDayRange([...b.days].sort());
+    return `${dayStr} ${to12h(b.open)}–${to12h(b.close)}`;
+  }).join(" · ");
 }
 
 async function reverseGeocode(lat, lng) {
@@ -197,6 +208,7 @@ function toAppTruck(row) {
     state: row.state || null,
     isHidden: row.is_hidden || false,
     isVerified: row.is_verified || false,
+    isApproved: row.is_approved !== false,
   };
 }
 
@@ -383,35 +395,52 @@ function MapClickHandler({ addMode, onPickLocation }) {
 }
 
 function ScheduleInput({ value, onChange }) {
-  const schedule = parseSchedule(value) || { open: "09:00", close: "17:00", days: [1, 2, 3, 4, 5] };
+  const blocks = parseSchedule(value) || [{ open: "09:00", close: "17:00", days: [1, 2, 3, 4, 5] }];
 
-  function update(patch) {
-    const updated = { ...schedule, ...patch };
-    onChange(JSON.stringify(updated));
+  function emit(updated) { onChange(JSON.stringify(updated)); }
+
+  function updateBlock(idx, patch) {
+    const updated = blocks.map((b, i) => i === idx ? { ...b, ...patch } : b);
+    emit(updated);
   }
 
-  function toggleDay(d) {
-    const days = schedule.days.includes(d)
-      ? schedule.days.filter(x => x !== d)
-      : [...schedule.days, d].sort();
-    update({ days });
+  function toggleDay(idx, d) {
+    const block = blocks[idx];
+    const days = block.days.includes(d) ? block.days.filter(x => x !== d) : [...block.days, d].sort();
+    updateBlock(idx, { days });
   }
+
+  function addBlock() {
+    const used = blocks.flatMap(b => b.days);
+    const available = [0,1,2,3,4,5,6].filter(d => !used.includes(d));
+    emit([...blocks, { open: "09:00", close: "17:00", days: available.length ? [available[0]] : [] }]);
+  }
+
+  function removeBlock(idx) {
+    if (blocks.length <= 1) return;
+    emit(blocks.filter((_, i) => i !== idx));
+  }
+
+  const usedDays = (idx) => blocks.flatMap((b, i) => i === idx ? [] : b.days);
 
   return (
     <div className="schedule-input">
-      <div className="schedule-days">
-        {DAY_LABELS.map((label, i) => (
-          <button key={i} type="button" className={`schedule-day ${schedule.days.includes(i) ? "active" : ""}`} onClick={() => toggleDay(i)}>{label}</button>
-        ))}
-      </div>
-      <div className="schedule-times">
-        <label className="schedule-time-label">
-          Open <input type="time" value={schedule.open} onChange={e => update({ open: e.target.value })} />
-        </label>
-        <label className="schedule-time-label">
-          Close <input type="time" value={schedule.close} onChange={e => update({ close: e.target.value })} />
-        </label>
-      </div>
+      {blocks.map((block, idx) => (
+        <div key={idx} className="schedule-block">
+          {blocks.length > 1 && <div className="schedule-block-header"><span className="schedule-block-label">Block {idx + 1}</span><button type="button" className="schedule-block-remove" onClick={() => removeBlock(idx)}>✕</button></div>}
+          <div className="schedule-days">
+            {DAY_LABELS.map((label, i) => {
+              const taken = usedDays(idx).includes(i);
+              return <button key={i} type="button" className={`schedule-day ${block.days.includes(i) ? "active" : ""}`} disabled={taken} onClick={() => toggleDay(idx, i)}>{label}</button>;
+            })}
+          </div>
+          <div className="schedule-times">
+            <label className="schedule-time-label">Open <input type="time" value={block.open} onChange={e => updateBlock(idx, { open: e.target.value })} /></label>
+            <label className="schedule-time-label">Close <input type="time" value={block.close} onChange={e => updateBlock(idx, { close: e.target.value })} /></label>
+          </div>
+        </div>
+      ))}
+      <button type="button" className="schedule-add-block" onClick={addBlock}>+ Different hours for other days</button>
     </div>
   );
 }
@@ -581,6 +610,9 @@ const css = `
     width: 54px; height: 54px;
     object-fit: contain;
     flex-shrink: 0;
+    background: #0c0d0f;
+    border-radius: 12px;
+    padding: 4px;
   }
 
   .logo-text h1 {
@@ -892,6 +924,11 @@ const css = `
 
   .schedule-section-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 10px 0 4px; }
   .schedule-input { margin: 8px 0; }
+  .schedule-block { margin-bottom: 10px; padding: 10px; background: var(--surface1); border: 1px solid var(--border); border-radius: 10px; }
+  .schedule-block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .schedule-block-label { font-size: 0.72rem; font-weight: 600; color: var(--text-dim); }
+  .schedule-block-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; }
+  .schedule-block-remove:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
   .schedule-days { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
   .schedule-day {
     padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;
@@ -899,12 +936,19 @@ const css = `
     cursor: pointer; transition: all 0.15s;
   }
   .schedule-day.active { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+  .schedule-day:disabled { opacity: 0.3; cursor: not-allowed; }
   .schedule-times { display: flex; gap: 12px; align-items: center; }
   .schedule-time-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
   .schedule-time-label input[type="time"] {
     background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
     padding: 4px 8px; color: var(--text); font-size: 0.82rem;
   }
+  .schedule-add-block {
+    background: none; border: 1px dashed var(--border); border-radius: 8px;
+    color: var(--text-dim); font-size: 0.78rem; font-weight: 600; padding: 8px;
+    width: 100%; cursor: pointer; transition: all 0.15s;
+  }
+  .schedule-add-block:hover { border-color: var(--cyan); color: var(--cyan); }
 
   .btn-use-location {
     margin-top: 6px;
@@ -1644,6 +1688,7 @@ const css = `
   .admin-badge { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
   .admin-badge.verified { background: #065f4620; color: #4ade80; border: 1px solid #4ade8040; }
   .admin-badge.hidden { background: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
+  .admin-badge.pending { background: #f59e0b20; color: #f59e0b; border: 1px solid #f59e0b40; }
 
   .admin-truck-actions { padding: 0 16px 14px; border-top: 1px solid var(--border); }
   .admin-btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
@@ -1898,7 +1943,7 @@ function AdminLoginModal({ onLogin, onClose }) {
 }
 
 /* ─── Admin Panel ──────────────────────────────────────────────────────────── */
-function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onEditTruck, onReconfirm, onAddTruck, onLogout, showToast }) {
+function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnhideComment, onDeleteComment, onDeleteTruck, onEditTruck, onReconfirm, onApprove, onReject, onAddTruck, onLogout, showToast }) {
   const [filter, setFilter] = useState("all");
   const [expandedTruck, setExpandedTruck] = useState(null);
   const [adminFocusRequest, setAdminFocusRequest] = useState(null);
@@ -2016,6 +2061,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
   }
 
   const filtered = useMemo(() => {
+    if (filter === "pending") return trucks.filter(t => !t.isApproved);
     if (filter === "hidden") return trucks.filter(t => t.isHidden);
     if (filter === "unverified") return trucks.filter(t => !t.isVerified && !t.isHidden);
     if (filter === "expired") return trucks.filter(t => isTruckExpired(t));
@@ -2096,6 +2142,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
 
       <div className="admin-filters">
         <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
+        <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>Pending ({trucks.filter(t => !t.isApproved).length})</button>
         <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({trucks.filter(t => t.isHidden).length})</button>
         <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({trucks.filter(t => !t.isVerified && !t.isHidden).length})</button>
         <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired ({trucks.filter(t => isTruckExpired(t)).length})</button>
@@ -2114,6 +2161,7 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
                 <div className="admin-truck-name">
                   {truck.name}
                   {truck.isVerified && <span className="admin-badge verified">Verified</span>}
+                  {!truck.isApproved && <span className="admin-badge pending">Pending</span>}
                   {truck.isHidden && <span className="admin-badge hidden">Hidden</span>}
                 </div>
                 <div className="admin-truck-meta">
@@ -2149,6 +2197,8 @@ function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment, onUnh
                   </div>
                 ) : (
                   <div className="admin-btn-row">
+                    {!truck.isApproved && <button className="btn-admin-action verify" onClick={() => onApprove(truck.id)}>✅ Approve</button>}
+                    {!truck.isApproved && <button className="btn-admin-action delete" onClick={() => onReject(truck.id)}>❌ Reject</button>}
                     <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
                       {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
                     </button>
@@ -3275,7 +3325,7 @@ function App() {
       id, name, food_type: food, open: isOpenBySchedule(hours) ?? true, votes: 1,
       lat: pendingPin[0], lng: pendingPin[1],
       is_permanent: newTruckPermanent, hours: hours || "",
-      user_id: userId, created_at: ts, last_confirmed_at: ts,
+      user_id: userId, created_at: ts, last_confirmed_at: ts, is_approved: false,
       ...(geo.street ? { street: geo.street } : {}),
       ...(geo.city ? { city: geo.city } : {}),
       ...(geo.state ? { state: geo.state } : {}),
@@ -3286,7 +3336,7 @@ function App() {
     setMapCenter(pendingPin);
     setAddMode(false);
     resetForm();
-    showToast(`"${name}" added! Thanks for the tip 🎉`);
+    showToast(`"${name}" submitted! It'll appear after admin review.`);
   }
 
   // ── Admin auth ──
@@ -3384,6 +3434,25 @@ function App() {
     showToast(`"${name}" added!`);
   }
 
+  async function handleAdminApprove(id) {
+    const { error } = await supabase.from("trucks").update({ is_approved: true }).eq("id", id);
+    if (error) showToast("Failed to approve.");
+    else {
+      setTrucks(cur => cur.map(t => t.id === id ? { ...t, isApproved: true } : t));
+      showToast("Truck approved ✅");
+    }
+  }
+
+  async function handleAdminReject(id) {
+    if (!window.confirm("Reject and permanently delete this truck?")) return;
+    const { error } = await supabase.from("trucks").delete().eq("id", id);
+    if (error) showToast("Failed to reject.");
+    else {
+      setTrucks(cur => cur.filter(t => t.id !== id));
+      showToast("Truck rejected and removed.");
+    }
+  }
+
   async function handleAdminReconfirm(id) {
     const { error } = await supabase.from("trucks").update({ last_confirmed_at: nowIso() }).eq("id", id);
     if (error) showToast("Failed to re-confirm.");
@@ -3425,7 +3494,7 @@ function App() {
   }
 
   const activeTrucks = useMemo(() =>
-    trucks.map(normalizeTruck).filter(t => !isTruckExpired(t) && !t.isHidden).map(t => {
+    trucks.map(normalizeTruck).filter(t => !isTruckExpired(t) && !t.isHidden && t.isApproved).map(t => {
       const scheduleOpen = isOpenBySchedule(t.hours);
       return scheduleOpen !== null ? { ...t, open: scheduleOpen } : t;
     }),
@@ -3485,6 +3554,8 @@ function App() {
           onDeleteTruck={handleAdminDeleteTruck}
           onEditTruck={handleAdminEditTruck}
           onReconfirm={handleAdminReconfirm}
+          onApprove={handleAdminApprove}
+          onReject={handleAdminReject}
           onAddTruck={handleAdminAddTruck}
           onLogout={handleAdminLogout}
           showToast={showToast}
