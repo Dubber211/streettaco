@@ -323,6 +323,16 @@ function MapZoomRadiusSync({ radiusMiles, onRadiusChange, skipRef }) {
   return null;
 }
 
+function ClosePopupOnDrag() {
+  const map = useMap();
+  useEffect(() => {
+    const close = () => map.closePopup();
+    map.on("dragstart", close);
+    return () => map.off("dragstart", close);
+  }, [map]);
+  return null;
+}
+
 function MapBoundsTracker({ onBoundsChange }) {
   const map = useMap();
   useEffect(() => {
@@ -2540,6 +2550,7 @@ function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pen
           url={theme === "light" ? TILE_LIGHT : TILE_DARK}
         />
         <FitBoundsToRadius center={mapCenter} radiusMiles={radiusMiles} skipRef={skipFitRef} />
+        <ClosePopupOnDrag />
         <MapBoundsTracker onBoundsChange={onBoundsChange} />
         <MapZoomRadiusSync radiusMiles={radiusMiles} onRadiusChange={onRadiusChange} skipRef={skipFitRef} />
         <FocusTruck trucks={trucks} focusRequest={focusRequest} markerRefs={markerRefs} />
