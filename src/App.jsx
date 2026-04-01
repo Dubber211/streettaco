@@ -6,7 +6,7 @@ import "./styles.css";
 import {
   DEFAULT_CENTER, DEFAULT_RADIUS_MILES, MAX_TRUCKS_PER_DAY,
   STORAGE_KEYS, CONFIRM_COOLDOWN_MINUTES, REPORT_COOLDOWN_MINUTES,
-  ADD_COOLDOWN_MINUTES,
+  ADD_COOLDOWN_MINUTES, VAPID_PUBLIC_KEY,
 } from "./constants";
 
 import {
@@ -140,16 +140,65 @@ function App() {
     showToast(msg);
   }
 
+  // Prompt for push notifications if not already subscribed
+  const pushPromptedRef = useRef(false);
+  async function promptPushIfNeeded(location) {
+    if (pushPromptedRef.current) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (Notification.permission === "granted" || Notification.permission === "denied") return;
+    pushPromptedRef.current = true;
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) return; // already subscribed
+
+      const padding = "=".repeat((4 - (VAPID_PUBLIC_KEY.length % 4)) % 4);
+      const base64 = (VAPID_PUBLIC_KEY + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      const key = Uint8Array.from([...raw].map(ch => ch.charCodeAt(0)));
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      });
+
+      const sub = subscription.toJSON();
+      let uid = localStorage.getItem("street-taco-user-id");
+      if (!uid) { uid = crypto.randomUUID(); localStorage.setItem("street-taco-user-id", uid); }
+
+      await supabase.from("push_subscriptions").insert({
+        user_id: uid,
+        endpoint: sub.endpoint,
+        keys: sub.keys,
+        lat: location?.[0] || null,
+        lng: location?.[1] || null,
+        radius_miles: 25,
+        favorites: [],
+        notify_new: true,
+        notify_favorites: true,
+      });
+    } catch (e) { /* user declined or error — that's fine */ }
+  }
+
   function handleUseMyLocation() {
     if (!navigator.geolocation) { showToast("Geolocation not supported. Using South Bend."); setMapCenter(DEFAULT_CENTER); return; }
     setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
-      pos => { applyUserLocation(pos.coords.latitude, pos.coords.longitude); setLocationLoading(false); },
+      pos => {
+        applyUserLocation(pos.coords.latitude, pos.coords.longitude);
+        setLocationLoading(false);
+        promptPushIfNeeded([pos.coords.latitude, pos.coords.longitude]);
+      },
       err => {
         setLocationLoading(false);
         const msgs = { [err.PERMISSION_DENIED]: "Location denied.", [err.TIMEOUT]: "Location timed out." };
         showToast((msgs[err.code] || "Couldn't get location.") + " Using South Bend.");
         setMapCenter(DEFAULT_CENTER);
+        promptPushIfNeeded(null);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
