@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RADIUS_OPTIONS, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, MOBILE_TRUCK_EXPIRATION_HOURS, STORAGE_KEYS, ONBOARDING_STEPS, VAPID_PUBLIC_KEY } from "../constants";
 import { supabase } from "../supabase";
 import { ScheduleInput } from "./MapHelpers";
@@ -13,7 +13,7 @@ export function Header({ theme, onToggleTheme, onOpenSettings }) {
           <p>Find food trucks near you • Community powered</p>
         </div>
       </div>
-      <button className="btn-theme-toggle" onClick={onOpenSettings} title="Settings">
+      <button className="btn-theme-toggle" onClick={onOpenSettings} title="Settings" aria-label="Settings">
         ⚙️
       </button>
     </div>
@@ -63,21 +63,26 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
     });
   }, [pushSupported]);
 
-  // Keep Supabase in sync when location, favorites, or preferences change
+  // Keep Supabase in sync when location, favorites, or preferences change (debounced)
+  const syncTimerRef = useRef(null);
   useEffect(() => {
     if (!pushEnabled || !pushSupported) return;
-    navigator.serviceWorker.ready.then((reg) =>
-      reg.pushManager.getSubscription().then((subscription) => {
-        if (!subscription) return;
-        supabase.from("push_subscriptions").update({
-          lat: userLocation?.[0] || null,
-          lng: userLocation?.[1] || null,
-          favorites: favorites || [],
-          notify_new: notifyNewTrucks,
-          notify_favorites: notifyFavorites,
-        }).eq("endpoint", subscription.endpoint);
-      })
-    );
+    clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      navigator.serviceWorker.ready.then((reg) =>
+        reg.pushManager.getSubscription().then((subscription) => {
+          if (!subscription) return;
+          supabase.from("push_subscriptions").update({
+            lat: userLocation?.[0] || null,
+            lng: userLocation?.[1] || null,
+            favorites: favorites || [],
+            notify_new: notifyNewTrucks,
+            notify_favorites: notifyFavorites,
+          }).eq("endpoint", subscription.endpoint);
+        })
+      );
+    }, 1000);
+    return () => clearTimeout(syncTimerRef.current);
   }, [pushEnabled, pushSupported, userLocation, favorites, notifyNewTrucks, notifyFavorites]);
 
   // Subscribe: ask the browser for permission, get a subscription, save it to Supabase
@@ -162,12 +167,18 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
     localStorage.setItem(STORAGE_KEYS.notifyFavorites, JSON.stringify(v));
   }
 
+  useEffect(() => {
+    function handleKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
   return (
     <div className="settings-overlay" onClick={onClose}>
       <div className="settings-panel" onClick={e => e.stopPropagation()}>
         <div className="settings-header">
           <span className="settings-title">Settings</span>
-          <button className="settings-close" onClick={onClose}>✕</button>
+          <button className="settings-close" onClick={onClose} aria-label="Close settings">✕</button>
         </div>
 
         <div className="settings-section">
@@ -259,7 +270,7 @@ export function ToastContainer({ toasts }) {
 }
 
 /* ─── Add Truck Panel (Waze-style) ──────────────────────────────────────────── */
-export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, newTruckFood, setNewTruckFood, newTruckOpen, setNewTruckOpen, newTruckPermanent, setNewTruckPermanent, newTruckHours, setNewTruckHours, onSaveTruck, onCancelAddTruck, canAdd, addsRemaining, onUseMyLocation }) {
+export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, newTruckFood, setNewTruckFood, newTruckOpen, setNewTruckOpen, newTruckPermanent, setNewTruckPermanent, newTruckHours, setNewTruckHours, onSaveTruck, onCancelAddTruck, canAdd, addsRemaining, onUseMyLocation, savingTruck }) {
   const [showHours, setShowHours] = useState(false);
   if (!addMode) return null;
 
@@ -316,8 +327,8 @@ export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckNa
         </div>
 
         <div className="form-actions">
-          <button className="btn-save" onClick={onSaveTruck} disabled={!canAdd}>
-            {canAdd ? "Save Truck 🎉" : `Daily limit reached (${MAX_TRUCKS_PER_DAY}/day)`}
+          <button className="btn-save" onClick={onSaveTruck} disabled={!canAdd || savingTruck}>
+            {savingTruck ? "Saving…" : canAdd ? "Save Truck 🎉" : `Daily limit reached (${MAX_TRUCKS_PER_DAY}/day)`}
           </button>
           <button className="btn-cancel" onClick={onCancelAddTruck}>Cancel</button>
         </div>

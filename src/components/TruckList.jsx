@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabase";
 import { MAX_NAME_LENGTH, MAX_FOOD_LENGTH } from "../constants";
 import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity } from "../utils";
@@ -66,7 +66,8 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
       .insert({ truck_id: truckId, user_id: userId, body })
       .select()
       .single();
-    if (!error) { setComments(cur => [{ ...data, votes: 0 }, ...cur]); setDraft(""); }
+    if (error) alert("Couldn't post comment — try again.");
+    else { setComments(cur => [{ ...data, votes: 0 }, ...cur]); setDraft(""); }
     setPosting(false);
   }
 
@@ -76,11 +77,13 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
 
     let delta = vote;
     if (existing) {
-      await supabase.from("comment_votes").delete().eq("comment_id", commentId).eq("user_id", userId);
+      const { error } = await supabase.from("comment_votes").delete().eq("comment_id", commentId).eq("user_id", userId);
+      if (error) { alert("Vote failed — try again."); return; }
       delta = vote - existing;
     }
 
-    await supabase.from("comment_votes").insert({ comment_id: commentId, user_id: userId, vote });
+    const { error } = await supabase.from("comment_votes").insert({ comment_id: commentId, user_id: userId, vote });
+    if (error) { alert("Vote failed — try again."); return; }
     const newVotes = (comments.find(c => c.id === commentId)?.votes || 0) + delta;
     await supabase.from("comments").update({ votes: newVotes }).eq("id", commentId);
     setCommentVotes(v => ({ ...v, [commentId]: vote }));
@@ -89,7 +92,8 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
 
   async function handleDelete(commentId) {
     const { error } = await supabase.from("comments").delete().eq("id", commentId).eq("user_id", userId);
-    if (!error) setComments(cur => cur.filter(c => c.id !== commentId));
+    if (error) alert("Couldn't delete comment — try again.");
+    else setComments(cur => cur.filter(c => c.id !== commentId));
   }
 
   const sorted = useMemo(() => {
@@ -122,19 +126,19 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
                     <div style={{ flex: 1 }}>
                       <div className="comment-body">{c.body}</div>
                       <div className="comment-vote-row">
-                        <button className={`comment-vote-btn ${commentVotes[c.id] === 1 ? "voted-up" : ""}`} onClick={() => handleCommentVote(c.id, 1)}>▲</button>
+                        <button className={`comment-vote-btn ${commentVotes[c.id] === 1 ? "voted-up" : ""}`} onClick={() => handleCommentVote(c.id, 1)} disabled={commentVotes[c.id] === 1} aria-label="Upvote comment">▲</button>
                         <span className="comment-vote-count">{c.votes}</span>
-                        <button className={`comment-vote-btn ${commentVotes[c.id] === -1 ? "voted-down" : ""}`} onClick={() => handleCommentVote(c.id, -1)}>▼</button>
+                        <button className={`comment-vote-btn ${commentVotes[c.id] === -1 ? "voted-down" : ""}`} onClick={() => handleCommentVote(c.id, -1)} disabled={commentVotes[c.id] === -1} aria-label="Downvote comment">▼</button>
                         <span className="comment-meta" style={{ marginLeft: 6 }}>{timeAgo(c.created_at)}</span>
                       </div>
                     </div>
                     {c.user_id === userId && (
-                      <button className="comment-del" onClick={() => handleDelete(c.id)} title="Delete">✕</button>
+                      <button className="comment-del" onClick={() => handleDelete(c.id)} title="Delete" aria-label="Delete comment">✕</button>
                     )}
                     {isAdmin && c.user_id !== userId && (
                       <div className="admin-comment-actions">
-                        <button className="comment-del" onClick={async () => { const ok = await onAdminHideComment(c.id); if (ok) setComments(cur => cur.filter(x => x.id !== c.id)); }} title="Hide">🚫</button>
-                        <button className="comment-del" onClick={async () => { const ok = await onAdminDeleteComment(c.id); if (ok) setComments(cur => cur.filter(x => x.id !== c.id)); }} title="Delete">🗑</button>
+                        <button className="comment-del" onClick={async () => { const ok = await onAdminHideComment(c.id); if (ok) setComments(cur => cur.filter(x => x.id !== c.id)); }} title="Hide" aria-label="Hide comment">🚫</button>
+                        <button className="comment-del" onClick={async () => { const ok = await onAdminDeleteComment(c.id); if (ok) setComments(cur => cur.filter(x => x.id !== c.id)); }} title="Delete" aria-label="Delete comment">🗑</button>
                       </div>
                     )}
                   </div>
@@ -180,9 +184,9 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
   const [openStatusId, setOpenStatusId] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
 
-  useEffect(() => {
-    const ids = visibleTrucks.map(t => t.id);
-    if (ids.length === 0) return;
+  const prevTruckIdsRef = useRef("");
+
+  function fetchCommentCounts(ids) {
     supabase.from("comments").select("truck_id").in("truck_id", ids)
       .then(({ data }) => {
         if (!data) return;
@@ -190,6 +194,28 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
         data.forEach(c => { counts[c.truck_id] = (counts[c.truck_id] || 0) + 1; });
         setCommentCounts(counts);
       });
+  }
+
+  useEffect(() => {
+    const ids = visibleTrucks.map(t => t.id);
+    const key = ids.slice().sort().join(",");
+    if (key === prevTruckIdsRef.current || ids.length === 0) return;
+    const timer = setTimeout(() => {
+      prevTruckIdsRef.current = key;
+      fetchCommentCounts(ids);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [visibleTrucks]);
+
+  // Realtime: refresh comment counts when comments are added or removed
+  useEffect(() => {
+    const channel = supabase.channel("comments-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => {
+        const ids = visibleTrucks.map(t => t.id);
+        if (ids.length > 0) fetchCommentCounts(ids);
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, [visibleTrucks]);
 
   useEffect(() => {
@@ -202,6 +228,13 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
   const [editName, setEditName] = useState("");
   const [editFood, setEditFood] = useState("");
   const [editOpen, setEditOpen] = useState(true);
+
+  // Close edit form if the truck being edited is removed
+  useEffect(() => {
+    if (editingId && !visibleTrucks.some(t => t.id === editingId)) {
+      setEditingId(null);
+    }
+  }, [visibleTrucks, editingId]);
 
   function startEdit(truck) {
     setEditingId(truck.id);
@@ -247,7 +280,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
 
       <div className="list-search">
         <input className="list-search-input" type="text" placeholder="Search trucks…" value={searchText} onChange={e => setSearchText(e.target.value)} />
-        {searchText && <button className="list-search-clear" onClick={() => setSearchText("")}>✕</button>}
+        {searchText && <button className="list-search-clear" onClick={() => setSearchText("")} aria-label="Clear search">✕</button>}
       </div>
 
       <div className="list-filters">
@@ -312,7 +345,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
                   {getFoodEmoji(truck.foodType)}
                 </div>
                 <div className="truck-card-info">
-                  <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"}>{truck.open ? "Open" : "Closed"}</span></div>
+                  <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "Open" : "Closed"}</span></div>
                   <div className="truck-card-sub">
                     {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}
                     &nbsp;·&nbsp; {truck.distance.toFixed(1)} mi
@@ -328,27 +361,27 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
                   </div>
                 </div>
                 <div className="truck-card-actions">
-                  <button className={`icon-btn icon-btn-fav ${favorites.includes(truck.id) ? "favorited" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onToggleFavorite(truck.id); }} title="Favorite">{favorites.includes(truck.id) ? "❤️" : "🤍"}</button>
+                  <button className={`icon-btn icon-btn-fav ${favorites.includes(truck.id) ? "favorited" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onToggleFavorite(truck.id); }} title="Favorite" aria-label="Favorite">{favorites.includes(truck.id) ? "❤️" : "🤍"}</button>
                   <div style={{ position: "relative" }}>
-                    <button className={`icon-btn icon-btn-vote ${up ? "voted-up" : down ? "voted-down" : ""}`} onClick={e => { e.stopPropagation(); setOpenStatusId(null); setOpenVoteId(v => v === truck.id ? null : truck.id); }} title="Vote">
+                    <button className={`icon-btn icon-btn-vote ${up ? "voted-up" : down ? "voted-down" : ""}`} onClick={e => { e.stopPropagation(); setOpenStatusId(null); setOpenVoteId(v => v === truck.id ? null : truck.id); }} title="Vote" aria-label="Vote">
                       {up ? "😊" : down ? "😞" : "🙂"}
                     </button>
                     {openVoteId === truck.id && (
                       <div className="vote-popup" onClick={e => e.stopPropagation()}>
-                        <button className={`vote-popup-btn vote-popup-up`} onClick={() => { onVote(truck.id, 1); setOpenVoteId(null); }} disabled={up} title="Upvote">👍</button>
-                        <button className={`vote-popup-btn vote-popup-down`} onClick={() => { onVote(truck.id, -1); setOpenVoteId(null); }} disabled={down} title="Downvote">👎</button>
+                        <button className={`vote-popup-btn vote-popup-up`} onClick={() => { onVote(truck.id, 1); setOpenVoteId(null); }} disabled={up} title="Upvote" aria-label="Upvote">👍</button>
+                        <button className={`vote-popup-btn vote-popup-down`} onClick={() => { onVote(truck.id, -1); setOpenVoteId(null); }} disabled={down} title="Downvote" aria-label="Downvote">👎</button>
                       </div>
                     )}
                   </div>
                   {isMine && (
-                    <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); startEdit(truck); }} title="Edit">✏️</button>
+                    <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); startEdit(truck); }} title="Edit" aria-label="Edit truck">✏️</button>
                   )}
                   {isMine && (
-                    <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onDeleteTruck(truck.id); }} title="Delete">🗑</button>
+                    <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onDeleteTruck(truck.id); }} title="Delete" aria-label="Delete truck">🗑</button>
                   )}
-                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments">💬{commentCounts[truck.id] ? <span className="comment-count-badge">{commentCounts[truck.id]}</span> : null}</button>
-                  <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share">🔗</button>
-                  <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate">🧭</button>
+                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments" aria-label="Comments">💬{commentCounts[truck.id] ? <span className="comment-count-badge">{commentCounts[truck.id]}</span> : null}</button>
+                  <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share" aria-label="Share">🔗</button>
+                  <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate" aria-label="Navigate">🧭</button>
                 </div>
               </div>
               {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}

@@ -73,11 +73,18 @@ function App() {
   const [newTruckOpen, setNewTruckOpen] = useState(true);
   const [newTruckPermanent, setNewTruckPermanent] = useState(false);
   const [newTruckHours, setNewTruckHours] = useState("");
+  const [savingTruck, setSavingTruck] = useState(false);
 
   const myTruckIds = useMemo(() =>
     trucks.filter(t => t.userId === userId).map(t => t.id),
     [trucks, userId]
   );
+
+  // Refs for polling to read current values without stale closures
+  const mapCenterRef = useRef(mapCenter);
+  const radiusMilesRef = useRef(radiusMiles);
+  useEffect(() => { mapCenterRef.current = mapCenter; }, [mapCenter]);
+  useEffect(() => { radiusMilesRef.current = radiusMiles; }, [radiusMiles]);
 
   // Auth + initial data load + realtime
   useEffect(() => {
@@ -94,7 +101,7 @@ function App() {
 
       const { data: truckRows, error: truckErr } = await supabase.from("trucks").select("*");
       if (truckErr) console.error("Failed to load trucks:", truckErr.message);
-      if (truckRows) setTrucks(truckRows.map(toAppTruck));
+      else if (truckRows) setTrucks(truckRows.map(toAppTruck));
 
       if (uid) {
         const { data: voteRows } = await supabase.from("user_votes").select("truck_id, vote").eq("user_id", uid);
@@ -113,6 +120,8 @@ function App() {
     }
     init();
 
+    const realtimeConnected = { current: false };
+
     const channel = supabase.channel("trucks-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "trucks" }, payload => {
         if (payload.eventType === "INSERT")
@@ -122,12 +131,29 @@ function App() {
         else if (payload.eventType === "DELETE")
           setTrucks(cur => cur.filter(t => t.id !== payload.old.id));
       })
-      .subscribe();
+      .subscribe(status => {
+        realtimeConnected.current = status === "SUBSCRIBED";
+      });
 
-    // Polling fallback in case realtime websocket fails
+    // Polling fallback — only runs when the realtime websocket is disconnected
+    // Scoped to a bounding box around the user's current map center + radius
     const poll = setInterval(async () => {
-      const { data } = await supabase.from("trucks").select("*");
-      if (data) setTrucks(data.map(toAppTruck));
+      if (realtimeConnected.current) return;
+      const center = mapCenterRef.current;
+      const radius = radiusMilesRef.current;
+      const latDeg = (radius * 2) / 69;
+      const lngDeg = (radius * 2) / (69 * Math.cos((center[0] * Math.PI) / 180));
+      const { data } = await supabase.from("trucks").select("*")
+        .gte("lat", center[0] - latDeg).lte("lat", center[0] + latDeg)
+        .gte("lng", center[1] - lngDeg).lte("lng", center[1] + lngDeg);
+      if (data) setTrucks(cur => {
+        // Merge: update trucks in range, keep trucks outside range unchanged
+        const fetched = new Map(data.map(r => [r.id, toAppTruck(r)]));
+        const updated = cur.map(t => fetched.has(t.id) ? fetched.get(t.id) : t);
+        // Add any new trucks from the fetch that weren't already in state
+        data.forEach(r => { if (!cur.find(t => t.id === r.id)) updated.push(toAppTruck(r)); });
+        return updated;
+      });
     }, 30000);
 
     return () => { supabase.removeChannel(channel); clearInterval(poll); };
@@ -239,14 +265,18 @@ function App() {
     }
   }
 
+  const votingRef = useRef(new Set());
   async function handleVote(id, vote) {
     const existing = userVotes[id];
     if (existing === vote) return;
+    if (votingRef.current.has(id)) return;
+    votingRef.current.add(id);
     const delta = existing === undefined ? vote : vote - existing;
     // Optimistic update
     setTrucks(cur => cur.map(t => t.id !== id ? t : { ...t, votes: Math.max(0, t.votes + delta) }));
     setUserVotes(cv => ({ ...cv, [id]: vote }));
     const { error } = await supabase.rpc("vote_truck", { p_truck_id: id, p_vote: vote });
+    votingRef.current.delete(id);
     if (error) {
       // Revert
       setTrucks(cur => cur.map(t => t.id !== id ? t : { ...t, votes: Math.max(0, t.votes - delta) }));
@@ -319,6 +349,7 @@ function App() {
 
   async function handleSaveTruck(e) {
     if (e && e.preventDefault) e.preventDefault();
+    if (savingTruck) return;
     const name = newTruckName.trim(), food = newTruckFood.trim(), hours = newTruckHours.trim();
     if (!canAdd) { showToast(`Daily limit of ${MAX_TRUCKS_PER_DAY} reached. Try again tomorrow.`); return; }
     const lastAdd = addHistory.filter(ts => hoursSince(ts) < 24).sort().pop();
@@ -332,6 +363,7 @@ function App() {
     if (containsProfanity(name) || containsProfanity(food)) { showToast("Please keep truck names and food types clean."); return; }
     if (trucks.some(t => t.name.toLowerCase() === name.toLowerCase())) { showToast(`"${name}" already exists!`); return; }
     if (!userId) { showToast("Still connecting — try again in a moment."); return; }
+    setSavingTruck(true);
     const id = Date.now() + Math.floor(Math.random() * 1000);
     const ts = nowIso();
     const geo = await reverseGeocode(pendingPin[0], pendingPin[1]);
@@ -344,12 +376,13 @@ function App() {
       ...(geo.city ? { city: geo.city } : {}),
       ...(geo.state ? { state: geo.state } : {}),
     });
-    if (error) { console.error("Save truck error:", error); showToast("Couldn't save truck — try again."); return; }
+    if (error) { console.error("Save truck error:", error); showToast("Couldn't save truck — try again."); setSavingTruck(false); return; }
     setUserVotes(cv => ({ ...cv, [id]: 1 }));
     setAddHistory(cur => [...cur.filter(t => hoursSince(t) < 24), ts]);
     setMapCenter(pendingPin);
     setAddMode(false);
     resetForm();
+    setSavingTruck(false);
     showToast(`"${name}" submitted! It'll appear after admin review.`);
   }
 
@@ -611,7 +644,7 @@ function App() {
         <div className="app-shell">
           <Header theme={theme} onToggleTheme={toggleTheme} onOpenSettings={() => setShowSettings(true)} />
           <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
-          <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} onUseMyLocation={handleUseLocationForPin} />
+          <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} onUseMyLocation={handleUseLocationForPin} savingTruck={savingTruck} />
           <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} visibleTrucks={visibleTrucks} onFindNearest={handleFindNearest} />
           <ProximityPrompt userLocation={userLocation} trucks={activeTrucks} onConfirm={handleConfirmStillHere} />
           <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} />

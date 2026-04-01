@@ -33,6 +33,14 @@ export function FitBoundsToTrucks({ trucks }) {
 export function AdminMap({ trucks, focusRequest, addMode, editMode, addPin, onPickLocation }) {
   const markerRefs = useRef({});
 
+  // Clean up refs for trucks that have been removed
+  useEffect(() => {
+    const truckIds = new Set(trucks.map(t => t.id));
+    for (const id of Object.keys(markerRefs.current)) {
+      if (!truckIds.has(Number(id))) delete markerRefs.current[id];
+    }
+  }, [trucks]);
+
   return (
     <div className="admin-map-wrapper">
       {(addMode || editMode) && <div className="admin-map-hint">📍 Click the map to {editMode ? "move the pin" : "drop a pin"}</div>}
@@ -61,7 +69,7 @@ export function AdminMap({ trucks, focusRequest, addMode, editMode, addPin, onPi
                     </div>
                   </div>
                   <div className="popup-badges">
-                    <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`}>{truck.open ? "● Open" : "○ Closed"}</span>
+                    <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "● Open" : "○ Closed"}</span>
                     <span className={`badge ${truck.isPermanent ? "badge-perm" : "badge-mobile"}`}>{truck.isPermanent ? "📌 Permanent" : "🚚 Mobile"}</span>
                   </div>
                   <div className="popup-meta">
@@ -86,6 +94,12 @@ export function AdminLoginModal({ onLogin, onClose }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    function handleKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -135,6 +149,17 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
   const [editHours, setEditHours] = useState("");
   const [editPermanent, setEditPermanent] = useState(false);
   const [editPin, setEditPin] = useState(null);
+
+  // Close edit/expand if the truck is removed
+  useEffect(() => {
+    if (editingId && !trucks.some(t => t.id === editingId)) {
+      setEditingId(null);
+      showToast("That truck was removed.");
+    }
+    if (expandedTruck && !trucks.some(t => t.id === expandedTruck)) {
+      setExpandedTruck(null);
+    }
+  }, [trucks, editingId, expandedTruck, showToast]);
 
   function startEdit(truck) {
     setEditingId(truck.id);
@@ -291,7 +316,7 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
             <div className="admin-add-location-label">Location:</div>
             <form onSubmit={handleAdminSearch} className="admin-search-row">
               <input className="add-input" placeholder="Search city, address, or ZIP…" value={addSearch} onChange={e => setAddSearch(e.target.value)} style={{ flex: 1 }} />
-              <button type="submit" className="btn-admin-action verify" disabled={addSearching}>{addSearching ? "…" : "🔍"}</button>
+              <button type="submit" className="btn-admin-action verify" disabled={addSearching} aria-label="Search location">{addSearching ? "…" : "🔍"}</button>
             </form>
             <div className="admin-btn-row">
               <button className="btn-admin-action verify" onClick={handleAdminUseLocation} disabled={addLocLoading}>

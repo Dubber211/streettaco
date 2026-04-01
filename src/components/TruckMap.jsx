@@ -10,6 +10,21 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
   const markerRefs = useRef({});
   const skipFitRef = useRef(false);
 
+  // Pre-computed distance lookup from visibleTrucks to avoid redundant haversine calls
+  const distanceMap = useMemo(() => {
+    const map = new Map();
+    if (visibleTrucks) visibleTrucks.forEach(t => map.set(t.id, t.distance));
+    return map;
+  }, [visibleTrucks]);
+
+  // Clean up refs for trucks that have been removed
+  useEffect(() => {
+    const truckIds = new Set(trucks.map(t => t.id));
+    for (const id of Object.keys(markerRefs.current)) {
+      if (!truckIds.has(Number(id))) delete markerRefs.current[id];
+    }
+  }, [trucks]);
+
   return (
     <div className={`map-wrapper ${addMode ? "add-mode-active" : ""}`}>
       {!addMode && (
@@ -59,8 +74,7 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
         <Circle center={userLocation || mapCenter} radius={milesToMeters(radiusMiles)} pathOptions={{ color: "#06b6d4", fillColor: "#06b6d4", fillOpacity: 0.06, weight: 1.5, dashArray: "6 4" }} />
 
         {trucks.map(truck => {
-          const ref = userLocation || mapCenter;
-          const dist = haversineMiles(ref, truck.position);
+          const dist = distanceMap.get(truck.id) ?? haversineMiles(userLocation || mapCenter, truck.position);
           const isNearby = dist <= radiusMiles;
           const up = userVotes[truck.id] === 1;
           const down = userVotes[truck.id] === -1;
@@ -78,7 +92,7 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
                     </div>
                   </div>
                   <div className="popup-badges">
-                    <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`}>{truck.open ? "● Open" : "○ Closed"}</span>
+                    <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "● Open" : "○ Closed"}</span>
                     <span className={`badge ${truck.isPermanent ? "badge-perm" : "badge-mobile"}`}>{truck.isPermanent ? "📌 Permanent" : "🚚 Mobile"}</span>
                     {isNearby && <span className="badge badge-nearby">📍 Nearby</span>}
                   </div>
@@ -90,13 +104,13 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
                   </div>
                   <PopupTopComment truckId={truck.id} />
                   <div className="popup-actions">
-                    <button className={`btn-vote btn-vote-up ${up ? "voted" : ""}`} onClick={() => onVote(truck.id, 1)} disabled={up}>
+                    <button className={`btn-vote btn-vote-up ${up ? "voted" : ""}`} onClick={() => onVote(truck.id, 1)} disabled={up} aria-label="Upvote">
                       😊
                     </button>
-                    <button className={`btn-vote btn-vote-down ${down ? "voted" : ""}`} onClick={() => onVote(truck.id, -1)} disabled={down}>
+                    <button className={`btn-vote btn-vote-down ${down ? "voted" : ""}`} onClick={() => onVote(truck.id, -1)} disabled={down} aria-label="Downvote">
                       😞
                     </button>
-                    <button className="btn-vote btn-vote-nav" onClick={() => window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank")}>
+                    <button className="btn-vote btn-vote-nav" onClick={() => window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank")} aria-label="Navigate">
                       🧭
                     </button>
                   </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { PROXIMITY_KEY, PROXIMITY_RADIUS_MILES, ONBOARDING_STEPS, STORAGE_KEYS } from "../constants";
 import { haversineMiles } from "../utils";
 import { supabase } from "../supabase";
@@ -99,6 +99,12 @@ export function OnboardingOverlay({ onDismiss }) {
   const isLast = step === ONBOARDING_STEPS.length - 1;
   const isFirst = step === 0;
   const totalSteps = ONBOARDING_STEPS.length;
+
+  useEffect(() => {
+    function handleKey(e) { if (e.key === "Escape") { isLast ? onDismiss() : setStep(ONBOARDING_STEPS.findIndex(s => s.type === "eula")); } }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [isLast, onDismiss]);
 
   const [targetRect, setTargetRect] = useState(null);
 
