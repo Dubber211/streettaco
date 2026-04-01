@@ -130,6 +130,13 @@ export function makeTruckIcon(foodType, isOpen) {
   const emoji = getFoodEmoji(foodType);
   const bg = isOpen ? "#06b6d4" : "#64748b";
   const glow = isOpen ? "0 4px 20px rgba(6,182,212,0.6)" : "0 2px 8px rgba(0,0,0,0.3)";
+  const pulse = isOpen ? `
+      <div style="
+        position:absolute;inset:-6px;
+        border-radius:50% 50% 50% 4px;
+        background:rgba(6,182,212,0.25);
+        animation:truck-pulse 2s ease-in-out infinite;
+      "></div>` : "";
   return L.divIcon({
     html: `
       <div style="
@@ -144,7 +151,7 @@ export function makeTruckIcon(foodType, isOpen) {
         cursor:pointer;
         transform:rotate(-5deg);
         transition:transform 0.2s;
-      ">${emoji}</div>
+      ">${pulse}${emoji}</div>
     `,
     className: "",
     iconSize: [42, 42],

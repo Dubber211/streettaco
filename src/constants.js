@@ -54,12 +54,11 @@ export const TILE_DARK = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/
 export const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
 export const ONBOARDING_STEPS = [
-  { type: "modal", icon: "🚚", title: "Welcome to StreetTaco", body: "Find the best food trucks near you, powered by people like you. Let's show you around — it only takes a sec." },
+  { type: "modal", icon: "🚚", title: "Welcome to StreetTaco", body: "Real people spotting real trucks — right now, near you." },
   { type: "spotlight", icon: "🗺️", title: "Your map", body: "This is where food trucks show up. Drag to explore, pinch to zoom, or search for a city.", target: ".map-wrapper", position: "bottom" },
   { type: "spotlight", icon: "📍", title: "Spot a truck?", body: "Tap this to drop a pin and share a food truck you found with the community.", target: ".map-add-truck-overlay", position: "bottom-left" },
-  { type: "spotlight", icon: "🔍", title: "Find your area", body: "Use your location or type in a city/ZIP to jump to the right spot on the map.", target: ".controls-bar", position: "bottom" },
-  { type: "spotlight", icon: "🗳️", title: "Vote & comment", body: "Each truck card shows votes, comments, and status. Tap to interact.", target: ".list-section", position: "top" },
   { type: "modal", icon: "🧭", title: "Get directions", body: "Tap the compass icon on any truck to open navigation in Google Maps or Apple Maps. We'll take you right to it!" },
+  { type: "spotlight", icon: "🗳️", title: "Community powered", body: "Each truck card shows votes, comments, and status. Tap to interact.", target: ".list-section", position: "top" },
   { type: "eula", icon: "📜", title: "End User License Agreement", body: "" },
   { type: "modal", icon: "🌮", title: "You're all set!", body: "Start exploring, add trucks you find, and help your community eat well." },
 ];

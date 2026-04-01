@@ -307,7 +307,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
 
           return (
             <div key={truck.id}>
-              <div className="truck-card" onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer" }}>
+              <div className={`truck-card${truck.open ? " truck-open" : ""}`} onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer" }}>
                 <div className={`truck-card-emoji ${truck.open ? "open" : "closed"}`}>
                   {getFoodEmoji(truck.foodType)}
                 </div>

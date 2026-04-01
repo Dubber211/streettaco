@@ -5,7 +5,7 @@ import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversi
 import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOnDrag, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
 import { PopupTopComment } from "./TruckList";
 
-export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme }) {
+export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme, visibleTrucks, onFindNearest }) {
   const pendingIcon = useMemo(() => makePendingIcon(), []);
   const markerRefs = useRef({});
   const skipFitRef = useRef(false);
@@ -28,6 +28,12 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
           {RADIUS_OPTIONS.map(r => <option key={r} value={r}>{r} mi</option>)}
         </select>
       </div>
+      {!addMode && visibleTrucks && visibleTrucks.length === 0 && trucks.length > 0 && (
+        <div className="map-empty-overlay">
+          <div className="map-empty-text">No trucks in this area</div>
+          <button className="btn-find-nearest" onClick={onFindNearest}>📍 Find nearest truck</button>
+        </div>
+      )}
       <MapContainer center={mapCenter} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
         <TileLayer
           key={theme}

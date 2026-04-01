@@ -68,7 +68,9 @@ export function OnboardingOverlay({ onDismiss }) {
         const el = document.querySelector(cur.target);
         if (el) {
           const rect = el.getBoundingClientRect();
-          setTargetRect({ top: rect.top - 8, left: rect.left - 8, width: rect.width + 16, height: rect.height + 16 });
+          const top = Math.max(0, rect.top - 8);
+          const height = rect.height + 16 - (top - (rect.top - 8));
+          setTargetRect({ top, left: rect.left - 8, width: rect.width + 16, height });
         } else {
           setTargetRect(null);
         }
@@ -95,17 +97,15 @@ export function OnboardingOverlay({ onDismiss }) {
     const belowTop = targetRect.top + targetRect.height + pad;
     const spaceBelow = window.innerHeight - belowTop;
     const spaceAbove = targetRect.top - pad;
-    // Center horizontally relative to the highlight, clamped to viewport
     let left = targetRect.left + targetRect.width / 2 - maxW / 2;
     left = Math.max(20, Math.min(left, window.innerWidth - maxW - 20));
 
     if (spaceBelow >= 200) {
-      return { top: belowTop, left, maxWidth: maxW };
+      return { top: Math.min(belowTop, window.innerHeight - 220), left, maxWidth: maxW };
     }
     if (spaceAbove >= 200) {
-      return { bottom: window.innerHeight - targetRect.top + pad, left, maxWidth: maxW };
+      return { top: Math.max(pad, targetRect.top - 220), left, maxWidth: maxW };
     }
-    // Fallback: center on screen
     return { top: "50%", left: "50%", transform: "translate(-50%, -50%)", maxWidth: maxW };
   }
 
