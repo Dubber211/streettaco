@@ -325,12 +325,34 @@ function App() {
     document.title = "StreetTaco Admin";
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#f59e0b");
     document.querySelector('link[rel="manifest"]')?.setAttribute("href", "/manifest-admin.json");
+    // Flag this device's push subscription as admin
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await supabase.from("push_subscriptions").update({ is_admin: true }).eq("endpoint", sub.endpoint);
+        }
+      } catch (e) { /* push not available, no big deal */ }
+    }
+
     const { data: truckRows } = await supabase.from("trucks").select("*");
     if (truckRows) setTrucks(truckRows.map(toAppTruck));
     return { error: null };
   }
 
   async function handleAdminLogout() {
+    // Remove admin flag from this device's push subscription
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await supabase.from("push_subscriptions").update({ is_admin: false }).eq("endpoint", sub.endpoint);
+        }
+      } catch (e) { /* push not available */ }
+    }
+
     await supabase.auth.signOut();
     const { data } = await supabase.auth.signInAnonymously();
     setUserId(data?.user?.id || null);
