@@ -40,7 +40,7 @@ function getUserId() {
   return id;
 }
 
-export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onShowOnboarding, userLocation, favorites, isAdmin }) {
+export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onShowOnboarding, userLocation, favorites }) {
   // "pushed" tracks whether we have an active push subscription in the browser
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -73,11 +73,10 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
           lat: userLocation?.[0] || null,
           lng: userLocation?.[1] || null,
           favorites: favorites || [],
-          is_admin: isAdmin || false,
         }).eq("endpoint", subscription.endpoint);
       })
     );
-  }, [pushEnabled, pushSupported, userLocation, favorites, isAdmin]);
+  }, [pushEnabled, pushSupported, userLocation, favorites]);
 
   // Subscribe: ask the browser for permission, get a subscription, save it to Supabase
   async function subscribeToPush() {
@@ -107,7 +106,6 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
         lng: userLocation?.[1] || null,
         radius_miles: 25,
         favorites: favorites || [],
-        is_admin: isAdmin || false,
       }, { onConflict: "endpoint" });
 
       setPushEnabled(true);

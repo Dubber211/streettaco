@@ -515,7 +515,6 @@ function App() {
           onShowOnboarding={() => { setShowSettings(false); setOnboardingDone(false); }}
           userLocation={userLocation}
           favorites={favorites}
-          isAdmin={isAdmin}
         />
       )}
 
