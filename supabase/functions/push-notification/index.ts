@@ -4,13 +4,9 @@
 // a push message to each one using the Web Push protocol.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { buildPushPayload } from "https://esm.sh/@block65/webcrypto-web-push?target=deno";
 
-// Web Push requires signing requests with VAPID keys.
-// These helpers handle the crypto (JWT signing + payload encryption).
-import { importVapidKey, generatePushHTTPRequest } from "https://esm.sh/webpush-webcrypto@1";
-
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   // Only accept POST requests
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -26,18 +22,14 @@ serve(async (req: Request) => {
       });
     }
 
-    // Grab our VAPID keys from Supabase secrets (set earlier via CLI)
-    const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
-    const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
-    const vapidEmail = Deno.env.get("VAPID_EMAIL")!;
-
-    // Import the VAPID key into a format the crypto library can use
-    const applicationServerKeys = await importVapidKey(
-      { publicKey: vapidPublicKey, privateKey: vapidPrivateKey },
-    );
+    // VAPID keys — our app's identity for push services
+    const vapid = {
+      subject: Deno.env.get("VAPID_EMAIL")!,
+      publicKey: Deno.env.get("VAPID_PUBLIC_KEY")!,
+      privateKey: Deno.env.get("VAPID_PRIVATE_KEY")!,
+    };
 
     // Connect to Supabase with the service_role key so we can read all subscriptions
-    // (our RLS policy only allows service_role to SELECT from push_subscriptions)
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -53,7 +45,10 @@ serve(async (req: Request) => {
     }
 
     // The payload is what the service worker's "push" event will receive
-    const payload = JSON.stringify({ title, body, url: url || "/" });
+    const message = {
+      data: JSON.stringify({ title, body, url: url || "/" }),
+      options: { ttl: 3600 },
+    };
 
     // Send a push message to each subscription
     let sent = 0;
@@ -63,33 +58,25 @@ serve(async (req: Request) => {
     for (const sub of subscriptions || []) {
       try {
         // Build the encrypted push request
-        const { headers, body: pushBody, endpoint } = await generatePushHTTPRequest({
-          applicationServerKeys,
-          payload,
-          target: {
-            endpoint: sub.endpoint,
-            keys: sub.keys,
-          },
-          adminContact: vapidEmail,
-          ttl: 60 * 60, // message expires after 1 hour
-        });
+        const subscription = {
+          endpoint: sub.endpoint,
+          expirationTime: null,
+          keys: sub.keys,
+        };
 
-        // Send it to the browser's push service (e.g., Firebase Cloud Messaging)
-        const pushResponse = await fetch(endpoint, {
-          method: "POST",
-          headers,
-          body: pushBody,
-        });
+        const payload = await buildPushPayload(message, subscription, vapid);
+
+        // Send it to the browser's push service
+        const pushResponse = await fetch(sub.endpoint, payload);
 
         if (pushResponse.status === 201) {
           sent++;
         } else if (pushResponse.status === 404 || pushResponse.status === 410) {
           // 410 Gone = user unsubscribed or subscription expired
-          // Clean up stale subscriptions so we don't keep trying
           staleEndpoints.push(sub.endpoint);
           failed++;
         } else {
-          console.error(`Push failed for ${sub.endpoint}: ${pushResponse.status}`);
+          console.error(`Push failed for ${sub.endpoint}: ${pushResponse.status} ${await pushResponse.text()}`);
           failed++;
         }
       } catch (err) {
@@ -113,7 +100,7 @@ serve(async (req: Request) => {
   } catch (err) {
     console.error("Push function error:", err);
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: (err as Error).message }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
