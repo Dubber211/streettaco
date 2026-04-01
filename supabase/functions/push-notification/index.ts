@@ -60,10 +60,16 @@ Deno.serve(async (req: Request) => {
       if (sub.is_admin) return true;
 
       if (type === "favorite") {
+        // Skip if user turned off favorite notifications
+        if (sub.notify_favorites === false) return false;
         // Only notify users who have this truck in their favorites
         return sub.favorites && sub.favorites.includes(truck_id);
       }
-      // "new_truck" type — only notify users within their radius
+
+      // "new_truck" type — skip if user turned off new truck notifications
+      if (sub.notify_new === false) return false;
+
+      // Only notify users within their radius
       if (truck_lat != null && truck_lng != null && sub.lat != null && sub.lng != null) {
         const dist = haversineMiles(sub.lat, sub.lng, truck_lat, truck_lng);
         return dist <= (sub.radius_miles || 25);

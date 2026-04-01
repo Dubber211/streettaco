@@ -63,7 +63,7 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
     });
   }, [pushSupported]);
 
-  // Keep Supabase in sync when location or favorites change
+  // Keep Supabase in sync when location, favorites, or preferences change
   useEffect(() => {
     if (!pushEnabled || !pushSupported) return;
     navigator.serviceWorker.ready.then((reg) =>
@@ -73,10 +73,12 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
           lat: userLocation?.[0] || null,
           lng: userLocation?.[1] || null,
           favorites: favorites || [],
+          notify_new: notifyNewTrucks,
+          notify_favorites: notifyFavorites,
         }).eq("endpoint", subscription.endpoint);
       })
     );
-  }, [pushEnabled, pushSupported, userLocation, favorites]);
+  }, [pushEnabled, pushSupported, userLocation, favorites, notifyNewTrucks, notifyFavorites]);
 
   // Subscribe: ask the browser for permission, get a subscription, save it to Supabase
   async function subscribeToPush() {
@@ -98,7 +100,8 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
       // The subscription object looks like:
       // { endpoint: "https://fcm.googleapis.com/...", keys: { p256dh: "...", auth: "..." } }
       const sub = subscription.toJSON();
-      await supabase.from("push_subscriptions").upsert({
+      // Use insert + update fallback instead of upsert to avoid overwriting is_admin
+      const { error: insertErr } = await supabase.from("push_subscriptions").insert({
         user_id: getUserId(),
         endpoint: sub.endpoint,
         keys: sub.keys,
@@ -106,7 +109,21 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
         lng: userLocation?.[1] || null,
         radius_miles: 25,
         favorites: favorites || [],
-      }, { onConflict: "endpoint" });
+        notify_new: notifyNewTrucks,
+        notify_favorites: notifyFavorites,
+      });
+      // If endpoint already exists, just update the safe fields
+      if (insertErr) {
+        await supabase.from("push_subscriptions").update({
+          user_id: getUserId(),
+          keys: sub.keys,
+          lat: userLocation?.[0] || null,
+          lng: userLocation?.[1] || null,
+          favorites: favorites || [],
+          notify_new: notifyNewTrucks,
+          notify_favorites: notifyFavorites,
+        }).eq("endpoint", sub.endpoint);
+      }
 
       setPushEnabled(true);
     } catch (err) {
