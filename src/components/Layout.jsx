@@ -260,6 +260,7 @@ export function ToastContainer({ toasts }) {
 
 /* ─── Add Truck Panel (Waze-style) ──────────────────────────────────────────── */
 export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, newTruckFood, setNewTruckFood, newTruckOpen, setNewTruckOpen, newTruckPermanent, setNewTruckPermanent, newTruckHours, setNewTruckHours, onSaveTruck, onCancelAddTruck, canAdd, addsRemaining, onUseMyLocation }) {
+  const [showHours, setShowHours] = useState(false);
   if (!addMode) return null;
 
   const step1Done = Boolean(pendingPin);
@@ -297,8 +298,10 @@ export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckNa
           <span className="checkbox-label">📌 Permanent spot</span>
         </label>
 
-        <div className="schedule-section-label">⏰ Operating Hours (optional)</div>
-        <ScheduleInput value={newTruckHours} onChange={setNewTruckHours} />
+        <div className="schedule-section-label" onClick={() => setShowHours(h => !h)} style={{ cursor: "pointer" }}>
+          {showHours ? "⏰ Operating Hours ▲" : "⏰ I know their hours →"}
+        </div>
+        {showHours && <ScheduleInput value={newTruckHours} onChange={setNewTruckHours} />}
 
         <div className={`pin-status ${pendingPin ? "placed" : "waiting"}`}>
           {pendingPin
