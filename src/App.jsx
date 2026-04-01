@@ -513,6 +513,8 @@ function App() {
           onClose={() => setShowSettings(false)}
           onShowEula={() => { setShowSettings(false); setOnboardingDone(false); }}
           onShowOnboarding={() => { setShowSettings(false); setOnboardingDone(false); }}
+          userLocation={userLocation}
+          favorites={favorites}
         />
       )}
 

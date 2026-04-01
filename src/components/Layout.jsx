@@ -40,7 +40,7 @@ function getUserId() {
   return id;
 }
 
-export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onShowOnboarding }) {
+export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onShowOnboarding, userLocation, favorites }) {
   // "pushed" tracks whether we have an active push subscription in the browser
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -62,6 +62,21 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
       });
     });
   }, [pushSupported]);
+
+  // Keep Supabase in sync when location or favorites change
+  useEffect(() => {
+    if (!pushEnabled || !pushSupported) return;
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.pushManager.getSubscription().then((subscription) => {
+        if (!subscription) return;
+        supabase.from("push_subscriptions").update({
+          lat: userLocation?.[0] || null,
+          lng: userLocation?.[1] || null,
+          favorites: favorites || [],
+        }).eq("endpoint", subscription.endpoint);
+      })
+    );
+  }, [pushEnabled, pushSupported, userLocation, favorites]);
 
   // Subscribe: ask the browser for permission, get a subscription, save it to Supabase
   async function subscribeToPush() {
@@ -87,6 +102,10 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
         user_id: getUserId(),
         endpoint: sub.endpoint,
         keys: sub.keys,
+        lat: userLocation?.[0] || null,
+        lng: userLocation?.[1] || null,
+        radius_miles: 25,
+        favorites: favorites || [],
       }, { onConflict: "endpoint" });
 
       setPushEnabled(true);
