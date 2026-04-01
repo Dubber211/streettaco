@@ -28,6 +28,8 @@ export const ADD_COOLDOWN_MINUTES = 15;
 export const PROXIMITY_KEY = "street-taco-proximity-prompts";
 export const PROXIMITY_RADIUS_MILES = 0.5;
 
+export const VAPID_PUBLIC_KEY = "BEivrz-goKCjHc7I271kS2xWt_CbEKT69FbP3dTNSuNTINu2x5Y-xkgZHUW_ba0DMZPG2b_1qnwzpXj9F4Hlxdw";
+
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Blocked words are now stored in Supabase (blocked_words table)

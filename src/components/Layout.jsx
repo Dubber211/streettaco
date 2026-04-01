@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { RADIUS_OPTIONS, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, MOBILE_TRUCK_EXPIRATION_HOURS, STORAGE_KEYS, ONBOARDING_STEPS } from "../constants";
+import { useState, useEffect } from "react";
+import { RADIUS_OPTIONS, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, MOBILE_TRUCK_EXPIRATION_HOURS, STORAGE_KEYS, ONBOARDING_STEPS, VAPID_PUBLIC_KEY } from "../constants";
+import { supabase } from "../supabase";
 import { ScheduleInput } from "./MapHelpers";
 
 export function Header({ theme, onToggleTheme, onOpenSettings }) {
@@ -20,13 +21,98 @@ export function Header({ theme, onToggleTheme, onOpenSettings }) {
 }
 
 /* ─── Settings Panel ───────────────────────────────────────────────────────── */
+// Convert the VAPID public key from base64 string to the Uint8Array format
+// that the browser's pushManager.subscribe() expects
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((ch) => ch.charCodeAt(0)));
+}
+
+// Get the user_id we use throughout the app (anonymous, stored in localStorage)
+function getUserId() {
+  let id = localStorage.getItem("street-taco-user-id");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("street-taco-user-id", id);
+  }
+  return id;
+}
+
 export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onShowOnboarding }) {
+  // "pushed" tracks whether we have an active push subscription in the browser
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushSupported] = useState(() => "serviceWorker" in navigator && "PushManager" in window);
+
   const [notifyNewTrucks, setNotifyNewTrucks] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.notifyNewTrucks) || "true"); } catch { return true; }
   });
   const [notifyFavorites, setNotifyFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.notifyFavorites) || "true"); } catch { return true; }
   });
+
+  // On mount, check if the browser already has a push subscription
+  useEffect(() => {
+    if (!pushSupported) return;
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.pushManager.getSubscription().then((sub) => {
+        setPushEnabled(!!sub);
+      });
+    });
+  }, [pushSupported]);
+
+  // Subscribe: ask the browser for permission, get a subscription, save it to Supabase
+  async function subscribeToPush() {
+    setPushLoading(true);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        alert("Notifications were blocked. You can enable them in your browser settings.");
+        setPushLoading(false);
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true, // required by Chrome — means every push must show a notification
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+
+      // The subscription object looks like:
+      // { endpoint: "https://fcm.googleapis.com/...", keys: { p256dh: "...", auth: "..." } }
+      const sub = subscription.toJSON();
+      await supabase.from("push_subscriptions").upsert({
+        user_id: getUserId(),
+        endpoint: sub.endpoint,
+        keys: sub.keys,
+      }, { onConflict: "endpoint" });
+
+      setPushEnabled(true);
+    } catch (err) {
+      console.error("Push subscribe failed:", err);
+      alert("Could not enable notifications. Please try again.");
+    }
+    setPushLoading(false);
+  }
+
+  // Unsubscribe: remove from browser and delete from Supabase
+  async function unsubscribeFromPush() {
+    setPushLoading(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const subscription = await reg.pushManager.getSubscription();
+      if (subscription) {
+        await supabase.from("push_subscriptions").delete().eq("endpoint", subscription.endpoint);
+        await subscription.unsubscribe();
+      }
+      setPushEnabled(false);
+    } catch (err) {
+      console.error("Push unsubscribe failed:", err);
+    }
+    setPushLoading(false);
+  }
 
   function toggleNotifyNew() {
     const v = !notifyNewTrucks;
@@ -58,14 +144,32 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
 
         <div className="settings-section">
           <div className="settings-section-title">Notifications</div>
-          <div className="settings-row" onClick={toggleNotifyNew}>
-            <span>🔔 New trucks nearby</span>
-            <span className={`settings-toggle ${notifyNewTrucks ? "on" : ""}`}>{notifyNewTrucks ? "On" : "Off"}</span>
-          </div>
-          <div className="settings-row" onClick={toggleNotifyFav}>
-            <span>❤️ Favorite truck updates</span>
-            <span className={`settings-toggle ${notifyFavorites ? "on" : ""}`}>{notifyFavorites ? "On" : "Off"}</span>
-          </div>
+          {pushSupported ? (
+            <>
+              <div className="settings-row" onClick={pushLoading ? undefined : (pushEnabled ? unsubscribeFromPush : subscribeToPush)}>
+                <span>🔔 Push notifications</span>
+                <span className={`settings-toggle ${pushEnabled ? "on" : ""}`}>
+                  {pushLoading ? "…" : pushEnabled ? "On" : "Off"}
+                </span>
+              </div>
+              {pushEnabled && (
+                <>
+                  <div className="settings-row sub-row" onClick={toggleNotifyNew}>
+                    <span>📍 New trucks nearby</span>
+                    <span className={`settings-toggle ${notifyNewTrucks ? "on" : ""}`}>{notifyNewTrucks ? "On" : "Off"}</span>
+                  </div>
+                  <div className="settings-row sub-row" onClick={toggleNotifyFav}>
+                    <span>❤️ Favorite truck updates</span>
+                    <span className={`settings-toggle ${notifyFavorites ? "on" : ""}`}>{notifyFavorites ? "On" : "Off"}</span>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="settings-row">
+              <span className="text-dim">Push notifications are not supported in this browser.</span>
+            </div>
+          )}
         </div>
 
         <div className="settings-section">

@@ -149,6 +149,7 @@
   }
   .settings-row:last-child { border-bottom: none; }
   .settings-row:hover { color: var(--cyan); }
+  .settings-row.sub-row { padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); }
   .settings-value { font-size: 0.85rem; color: var(--text-muted); }
   .settings-arrow { color: var(--text-dim); font-size: 0.85rem; }
   .settings-toggle {

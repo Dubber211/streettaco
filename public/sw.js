@@ -17,6 +17,48 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
+/* ─── Push Notifications ──────────────────────────────────────────────────── */
+
+// Fires when a push message arrives from our Supabase Edge Function.
+// The browser wakes up this service worker even if the app is closed.
+self.addEventListener("push", (e) => {
+  // The Edge Function sends JSON with a title and body
+  const data = e.data ? e.data.json() : {};
+  const title = data.title || "StreetTaco";
+  const options = {
+    body: data.body || "Something new is happening nearby!",
+    icon: "/icon-192.png",
+    badge: "/favicon.png",
+    data: { url: data.url || "/" },
+  };
+
+  // showNotification returns a promise — we must wrap it in waitUntil
+  // so the browser keeps the service worker alive until it's done
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Fires when the user taps/clicks the notification
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+
+  // Open the app (or focus it if it's already open)
+  const url = e.notification.data?.url || "/";
+  e.waitUntil(
+    clients.matchAll({ type: "window" }).then((windowClients) => {
+      // If the app is already open in a tab, focus it
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise open a new tab
+      return clients.openWindow(url);
+    })
+  );
+});
+
+/* ─── Caching ─────────────────────────────────────────────────────────────── */
+
 self.addEventListener("fetch", (e) => {
   // Network-first for API calls, cache-first for assets
   if (e.request.url.includes("supabase") || e.request.url.includes("nominatim")) {
