@@ -24,7 +24,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { title, body, url, type, truck_id, truck_lat, truck_lng } = await req.json();
+    const { title, body, url, type, truck_id, truck_lat, truck_lng, target_user } = await req.json();
     if (!title || !body) {
       return new Response(JSON.stringify({ error: "title and body are required" }), {
         status: 400,
@@ -53,6 +53,9 @@ Deno.serve(async (req: Request) => {
 
     // Filter subscriptions based on notification type
     const targets = (subscriptions || []).filter((sub) => {
+      // Proximity notifications target a specific user
+      if (type === "proximity" && target_user) return sub.user_id === target_user;
+
       // Admin-only notifications (e.g. pending truck submissions)
       if (type === "admin_pending") return !!sub.is_admin;
 
@@ -78,8 +81,17 @@ Deno.serve(async (req: Request) => {
       return sub.lat == null;
     });
 
+    // For proximity notifications, include Supabase URL and anon key
+    // so the service worker can call back to confirm the truck
+    const extraData = type === "proximity" ? {
+      type: "proximity",
+      truck_id,
+      supabase_url: Deno.env.get("SUPABASE_URL"),
+      anon_key: Deno.env.get("SUPABASE_ANON_KEY"),
+    } : {};
+
     const message = {
-      data: JSON.stringify({ title, body, url: url || "/" }),
+      data: JSON.stringify({ title, body, url: url || "/", ...extraData }),
       options: { ttl: 3600 },
     };
 

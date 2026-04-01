@@ -1,15 +1,47 @@
 import { useEffect, useMemo, useState } from "react";
 import { PROXIMITY_KEY, PROXIMITY_RADIUS_MILES, ONBOARDING_STEPS, STORAGE_KEYS } from "../constants";
 import { haversineMiles } from "../utils";
+import { supabase } from "../supabase";
 
 /* ─── Proximity Prompt ─────────────────────────────────────────────────────── */
 export function getStoredDismissals() {
   try { return JSON.parse(localStorage.getItem(PROXIMITY_KEY) || "{}"); } catch { return {}; }
 }
 
+// Send a proximity push notification instead of showing the in-app modal
+async function sendProximityPush(truck) {
+  try {
+    let uid = localStorage.getItem("street-taco-user-id");
+    if (!uid) return;
+    const supabaseUrl = supabase.supabaseUrl;
+    await fetch(`${supabaseUrl}/functions/v1/push-notification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "proximity",
+        title: "Truck nearby!",
+        body: `Are you near ${truck.name}? Confirm it's still here!`,
+        url: "/",
+        truck_id: truck.id,
+        target_user: uid,
+      }),
+    });
+  } catch (e) { /* Edge Function call failed — fall through to in-app */ }
+}
+
 export function ProximityPrompt({ userLocation, trucks, onConfirm }) {
   const [prompt, setPrompt] = useState(null);
   const [dismissed, setDismissed] = useState(getStoredDismissals);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+
+  // Check if push is active on mount
+  useEffect(() => {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      navigator.serviceWorker.ready.then(reg =>
+        reg.pushManager.getSubscription().then(sub => setPushSubscribed(!!sub))
+      );
+    }
+  }, []);
 
   const nearbyTruck = useMemo(() => {
     if (!userLocation || trucks.length === 0) return null;
@@ -22,20 +54,29 @@ export function ProximityPrompt({ userLocation, trucks, onConfirm }) {
     return null;
   }, [userLocation, trucks, dismissed]);
 
-  useEffect(() => { setPrompt(nearbyTruck); }, [nearbyTruck]);
+  useEffect(() => {
+    if (!nearbyTruck) { setPrompt(null); return; }
+    if (pushSubscribed) {
+      // Send a push notification instead of showing in-app prompt
+      sendProximityPush(nearbyTruck);
+      markDone(nearbyTruck.id);
+    } else {
+      setPrompt(nearbyTruck);
+    }
+  }, [nearbyTruck, pushSubscribed]);
 
   function markDone(truckId) {
     const today = new Date().toISOString().slice(0, 10);
     const key = `${truckId}_${today}`;
     const updated = { ...dismissed, [key]: true };
-    // Clean old entries
     Object.keys(updated).forEach(k => { if (!k.endsWith(today)) delete updated[k]; });
     setDismissed(updated);
     localStorage.setItem(PROXIMITY_KEY, JSON.stringify(updated));
     setPrompt(null);
   }
 
-  if (!prompt) return null;
+  // Don't show in-app prompt if push is subscribed or no nearby truck
+  if (!prompt || pushSubscribed) return null;
 
   return (
     <div className="proximity-overlay">

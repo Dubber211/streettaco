@@ -22,36 +22,81 @@ self.addEventListener("activate", (e) => {
 // Fires when a push message arrives from our Supabase Edge Function.
 // The browser wakes up this service worker even if the app is closed.
 self.addEventListener("push", (e) => {
-  // The Edge Function sends JSON with a title and body
   const data = e.data ? e.data.json() : {};
   const title = data.title || "StreetTaco";
   const options = {
     body: data.body || "Something new is happening nearby!",
     icon: "/icon-192.png",
     badge: "/favicon.png",
-    data: { url: data.url || "/" },
+    data: { url: data.url || "/", type: data.type, truck_id: data.truck_id, supabase_url: data.supabase_url, anon_key: data.anon_key },
   };
 
-  // showNotification returns a promise — we must wrap it in waitUntil
-  // so the browser keeps the service worker alive until it's done
+  // Proximity notifications get action buttons
+  if (data.type === "proximity") {
+    options.actions = [
+      { action: "still_here", title: "Still here" },
+      { action: "not_here", title: "Nope" },
+    ];
+    options.requireInteraction = true;
+  }
+
   e.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Fires when the user taps/clicks the notification
+// Fires when the user taps/clicks the notification or an action button
 self.addEventListener("notificationclick", (e) => {
+  const data = e.notification.data || {};
   e.notification.close();
 
-  // Open the app (or focus it if it's already open)
-  const url = e.notification.data?.url || "/";
+  // Handle proximity action buttons
+  if (data.type === "proximity" && data.truck_id && data.supabase_url && data.anon_key) {
+    if (e.action === "still_here") {
+      // Confirm the truck — update last_confirmed_at and bump votes
+      e.waitUntil(
+        fetch(`${data.supabase_url}/rest/v1/trucks?id=eq.${data.truck_id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": data.anon_key,
+            "Authorization": "Bearer " + data.anon_key,
+            "Prefer": "return=minimal",
+          },
+          body: JSON.stringify({
+            last_confirmed_at: new Date().toISOString(),
+            votes: undefined, // we'll use RPC instead
+          }),
+        })
+        .then(() =>
+          // Bump votes by 1 using raw SQL via RPC
+          fetch(`${data.supabase_url}/rest/v1/rpc/confirm_truck`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": data.anon_key,
+              "Authorization": "Bearer " + data.anon_key,
+            },
+            body: JSON.stringify({ truck_id_input: data.truck_id }),
+          })
+        )
+        .catch((err) => console.error("Confirm truck failed:", err))
+      );
+      return;
+    }
+    if (e.action === "not_here") {
+      // User says truck isn't there — no action needed, just dismiss
+      return;
+    }
+  }
+
+  // Default: open the app
+  const url = data.url || "/";
   e.waitUntil(
     clients.matchAll({ type: "window" }).then((windowClients) => {
-      // If the app is already open in a tab, focus it
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && "focus" in client) {
           return client.focus();
         }
       }
-      // Otherwise open a new tab
       return clients.openWindow(url);
     })
   );
