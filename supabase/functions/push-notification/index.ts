@@ -53,6 +53,12 @@ Deno.serve(async (req: Request) => {
 
     // Filter subscriptions based on notification type
     const targets = (subscriptions || []).filter((sub) => {
+      // Admin-only notifications (e.g. pending truck submissions)
+      if (type === "admin_pending") return !!sub.is_admin;
+
+      // Admins get ALL other notifications — new trucks, comments, everything
+      if (sub.is_admin) return true;
+
       if (type === "favorite") {
         // Only notify users who have this truck in their favorites
         return sub.favorites && sub.favorites.includes(truck_id);
