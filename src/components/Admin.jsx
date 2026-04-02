@@ -301,7 +301,7 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
       <div className="admin-header">
         <div className="admin-header-top">
           <div className="admin-header-brand">
-            <span className="admin-header-title">🌮 StreetTaco</span>
+            <img src="/logo.png" alt="" className="admin-logo-img" /><span className="admin-header-title">StreetTaco</span>
             <span className="admin-header-sub">Admin</span>
           </div>
           <div className="admin-header-actions">

@@ -218,7 +218,31 @@ function App() {
       pos => {
         applyUserLocation(pos.coords.latitude, pos.coords.longitude);
         setLocationLoading(false);
-        promptPushIfNeeded([pos.coords.latitude, pos.coords.longitude]);
+      },
+      err => {
+        setLocationLoading(false);
+        const msgs = { [err.PERMISSION_DENIED]: "Location denied.", [err.TIMEOUT]: "Location timed out." };
+        showToast((msgs[err.code] || "Couldn't get location.") + " Using South Bend.");
+        setMapCenter(DEFAULT_CENTER);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  function handleOnboardingComplete() {
+    setOnboardingDone(true);
+    if (!navigator.geolocation) {
+      setMapCenter(DEFAULT_CENTER);
+      promptPushIfNeeded(null);
+      return;
+    }
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const loc = [pos.coords.latitude, pos.coords.longitude];
+        applyUserLocation(loc[0], loc[1]);
+        setLocationLoading(false);
+        promptPushIfNeeded(loc);
       },
       err => {
         setLocationLoading(false);
@@ -230,8 +254,6 @@ function App() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }
-
-  useEffect(() => { handleUseMyLocation(); }, []);
 
   async function handleLocationSearch(e) {
     e.preventDefault();
@@ -612,7 +634,7 @@ function App() {
   return (
     <>
       {showAdminLogin && <AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
-      {onboardingDone !== true && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} skipEula={onboardingDone === "walkthrough"} />}
+      {onboardingDone !== true && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={onboardingDone === "walkthrough" ? () => setOnboardingDone(true) : handleOnboardingComplete} skipEula={onboardingDone === "walkthrough"} />}
       {showSettings && (
         <SettingsPanel
           theme={theme}

@@ -1,38 +1,73 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback } from "react";
 import { supabase } from "../supabase";
 import { MAX_NAME_LENGTH, MAX_FOOD_LENGTH } from "../constants";
 import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity } from "../utils";
 
 /* ─── Bottom Sheet Hook ────────────────────────────────────────────────────── */
+const SNAP_POINTS = { peek: 110, half: () => window.innerHeight * 0.45, full: () => window.innerHeight * 0.85 };
+function getSnapHeight(name) { const v = SNAP_POINTS[name]; return typeof v === "function" ? v() : v; }
+
 function useBottomSheet() {
-  const [snap, setSnap] = useState("peek"); // "peek" | "half" | "full"
+  const [snap, setSnap] = useState("peek");
   const sheetRef = useRef(null);
-  const dragRef = useRef({ startY: 0, startSnap: "peek" });
+  const dragRef = useRef({ startY: 0, startHeight: 0, dragging: false });
+
+  const applyTranslate = useCallback((h) => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const full = getSnapHeight("full");
+    el.style.transform = `translateY(${full - h}px)`;
+  }, []);
 
   const onDragStart = useCallback((e) => {
     const y = e.touches ? e.touches[0].clientY : e.clientY;
-    dragRef.current = { startY: y, startSnap: snap };
+    const el = sheetRef.current;
+    if (!el) return;
+    el.style.transition = "none";
+    dragRef.current = { startY: y, startHeight: getSnapHeight(snap), dragging: false };
   }, [snap]);
 
+  const onDragMove = useCallback((e) => {
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const d = dragRef.current;
+    const delta = d.startY - y;
+    if (!d.dragging && Math.abs(delta) > 5) d.dragging = true;
+    if (!d.dragging) return;
+    const h = Math.max(getSnapHeight("peek"), Math.min(getSnapHeight("full"), d.startHeight + delta));
+    applyTranslate(h);
+  }, [applyTranslate]);
+
   const onDragEnd = useCallback((e) => {
+    const el = sheetRef.current;
+    if (el) el.style.transition = "";
     const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
-    const delta = y - dragRef.current.startY;
-    const prev = dragRef.current.startSnap;
-    if (Math.abs(delta) < 30) {
-      // Tap — cycle through snaps
-      setSnap(prev === "peek" ? "half" : prev === "half" ? "full" : "half");
+    const d = dragRef.current;
+    if (!d.dragging) {
+      setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "half");
       return;
     }
-    if (delta > 0) {
-      // Dragged down
-      setSnap(prev === "full" ? "half" : "peek");
-    } else {
-      // Dragged up
-      setSnap(prev === "peek" ? "half" : "full");
+    const delta = d.startY - y;
+    const currentH = Math.max(getSnapHeight("peek"), Math.min(getSnapHeight("full"), d.startHeight + delta));
+    const snapNames = ["peek", "half", "full"];
+    let closest = "peek", closestDist = Infinity;
+    for (const s of snapNames) {
+      const dist = Math.abs(currentH - getSnapHeight(s));
+      if (dist < closestDist) { closestDist = dist; closest = s; }
     }
+    setSnap(closest);
   }, []);
 
-  return { snap, setSnap, sheetRef, onDragStart, onDragEnd };
+  useLayoutEffect(() => {
+    applyTranslate(getSnapHeight(snap));
+  }, [snap, applyTranslate]);
+
+  useEffect(() => {
+    const onResize = () => applyTranslate(getSnapHeight(snap));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [snap, applyTranslate]);
+
+  return { snap, setSnap, sheetRef, onDragStart, onDragMove, onDragEnd };
 }
 
 export function PopupTopComment({ truckId }) {
@@ -319,11 +354,11 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
     return list;
   }, [visibleTrucks, searchText, showOpenOnly, showFavoritesOnly, favorites, activeFoodFilter, sortBy]);
 
-  const { snap, setSnap, sheetRef, onDragStart, onDragEnd } = useBottomSheet();
+  const { snap, setSnap, sheetRef, onDragStart, onDragMove, onDragEnd } = useBottomSheet();
 
   return (
     <div className={`bottom-sheet snap-${snap}`} ref={sheetRef}>
-      <div className="sheet-handle" onTouchStart={onDragStart} onTouchEnd={onDragEnd} onMouseDown={onDragStart} onMouseUp={onDragEnd}>
+      <div className="sheet-handle" onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onMouseDown={onDragStart} onMouseMove={onDragMove} onMouseUp={onDragEnd}>
         <div className="sheet-handle-bar" />
       </div>
       <div className="sheet-header" onClick={() => setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "half")}>
