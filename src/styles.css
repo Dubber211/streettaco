@@ -62,8 +62,10 @@
     min-height: 100vh;
     font-family: var(--font-body);
     color: var(--text);
-    overflow: hidden;
   }
+
+  /* Only lock scroll when the map-app layout is active (not admin) */
+  .map-app { overflow: hidden; }
 
   /* ── Full-viewport map app layout ── */
   .map-app {
