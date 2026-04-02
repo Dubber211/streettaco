@@ -115,7 +115,7 @@ export function toAppTruck(row) {
     state: row.state || null,
     isHidden: row.is_hidden || false,
     isVerified: row.is_verified || false,
-    isApproved: row.is_approved !== false,
+    isApproved: row.is_approved === true,
   };
 }
 

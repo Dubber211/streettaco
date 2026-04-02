@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { PROXIMITY_KEY, PROXIMITY_RADIUS_MILES, ONBOARDING_STEPS, STORAGE_KEYS } from "../constants";
 import { haversineMiles } from "../utils";
 import { supabase } from "../supabase";
+import { useFocusTrap } from "../hooks";
 
 /* ─── Proximity Prompt ─────────────────────────────────────────────────────── */
 export function getStoredDismissals() {
@@ -106,6 +107,8 @@ export function OnboardingOverlay({ onDismiss }) {
     return () => document.removeEventListener("keydown", handleKey);
   }, [isLast, onDismiss]);
 
+  const trapRef = useFocusTrap();
+
   const [targetRect, setTargetRect] = useState(null);
 
   useEffect(() => {
@@ -160,7 +163,7 @@ export function OnboardingOverlay({ onDismiss }) {
   if (current.type === "eula") {
     return (
       <div className="onboarding-backdrop">
-        <div className="onboarding-card eula-card">
+        <div className="onboarding-card eula-card" ref={trapRef}>
           <div className="onboarding-icon">{current.icon}</div>
           <div className="onboarding-title">{current.title}</div>
           <div className="eula-scroll">
@@ -202,7 +205,7 @@ export function OnboardingOverlay({ onDismiss }) {
   if (current.type === "modal") {
     return (
       <div className="onboarding-backdrop">
-        <div className="onboarding-card">
+        <div className="onboarding-card" ref={trapRef}>
           <div className="onboarding-icon">{current.icon}</div>
           <div className="onboarding-title">{current.title}</div>
           <div className="onboarding-body">{current.body}</div>
@@ -230,7 +233,7 @@ export function OnboardingOverlay({ onDismiss }) {
       {targetRect && (
         <div className="onboarding-highlight" style={{ top: targetRect.top, left: targetRect.left, width: targetRect.width, height: targetRect.height }} />
       )}
-      <div className="onboarding-tooltip" style={getTooltipStyle()}>
+      <div className="onboarding-tooltip" ref={trapRef} style={getTooltipStyle()}>
         <div className="onboarding-icon">{current.icon}</div>
         <div className="onboarding-title">{current.title}</div>
         <div className="onboarding-body">{current.body}</div>

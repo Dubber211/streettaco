@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import { useFocusTrap } from "../hooks";
 import { supabase } from "../supabase";
 import { DEFAULT_CENTER, TILE_LIGHT, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, STORAGE_KEYS } from "../constants";
 import { getFoodEmoji, makeTruckIcon, adminPinIcon, formatSchedule, timeAgo, isOpenBySchedule, isTruckExpired, reverseGeocode } from "../utils";
@@ -110,9 +111,11 @@ export function AdminLoginModal({ onLogin, onClose }) {
     if (result.error) { setError(result.error); setSubmitting(false); }
   }
 
+  const trapRef = useFocusTrap();
+
   return (
     <div className="onboarding-backdrop">
-      <div className="onboarding-card admin-login-card">
+      <div className="onboarding-card admin-login-card" ref={trapRef}>
         <div className="onboarding-icon">🔐</div>
         <div className="onboarding-title">Admin Login</div>
         <form onSubmit={handleSubmit} className="admin-login-form">

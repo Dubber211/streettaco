@@ -51,33 +51,17 @@ self.addEventListener("notificationclick", (e) => {
   // Handle proximity action buttons
   if (data.type === "proximity" && data.truck_id && data.supabase_url && data.anon_key) {
     if (e.action === "still_here") {
-      // Confirm the truck — update last_confirmed_at and bump votes
+      // Confirm the truck via RPC (bumps votes + resets last_confirmed_at)
       e.waitUntil(
-        fetch(`${data.supabase_url}/rest/v1/trucks?id=eq.${data.truck_id}`, {
-          method: "PATCH",
+        fetch(`${data.supabase_url}/rest/v1/rpc/confirm_truck`, {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             "apikey": data.anon_key,
             "Authorization": "Bearer " + data.anon_key,
-            "Prefer": "return=minimal",
           },
-          body: JSON.stringify({
-            last_confirmed_at: new Date().toISOString(),
-            votes: undefined, // we'll use RPC instead
-          }),
+          body: JSON.stringify({ truck_id_input: data.truck_id }),
         })
-        .then(() =>
-          // Bump votes by 1 using raw SQL via RPC
-          fetch(`${data.supabase_url}/rest/v1/rpc/confirm_truck`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": data.anon_key,
-              "Authorization": "Bearer " + data.anon_key,
-            },
-            body: JSON.stringify({ truck_id_input: data.truck_id }),
-          })
-        )
         .catch((err) => console.error("Confirm truck failed:", err))
       );
       return;
@@ -105,11 +89,12 @@ self.addEventListener("notificationclick", (e) => {
 /* ─── Caching ─────────────────────────────────────────────────────────────── */
 
 self.addEventListener("fetch", (e) => {
-  // Network-first for API calls, cache-first for assets
+  // Let API calls go straight to the network — no caching
   if (e.request.url.includes("supabase") || e.request.url.includes("nominatim")) {
     return;
   }
 
+  // Network-first for app assets, fall back to cache, then offline page
   e.respondWith(
     fetch(e.request)
       .then((res) => {
@@ -119,6 +104,13 @@ self.addEventListener("fetch", (e) => {
         }
         return res;
       })
-      .catch(() => caches.match(e.request))
+      .catch(() =>
+        caches.match(e.request).then((cached) => {
+          if (cached) return cached;
+          // For navigation requests, serve the cached index so the SPA can handle it
+          if (e.request.mode === "navigate") return caches.match("/index.html");
+          return new Response("Offline", { status: 503, statusText: "Service Unavailable" });
+        })
+      )
   );
 });

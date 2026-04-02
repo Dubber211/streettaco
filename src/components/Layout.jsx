@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { RADIUS_OPTIONS, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, MOBILE_TRUCK_EXPIRATION_HOURS, STORAGE_KEYS, ONBOARDING_STEPS, VAPID_PUBLIC_KEY } from "../constants";
 import { supabase } from "../supabase";
 import { ScheduleInput } from "./MapHelpers";
+import { useFocusTrap } from "../hooks";
 
 export function Header({ theme, onToggleTheme, onOpenSettings }) {
   return (
@@ -173,9 +174,11 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
+  const trapRef = useFocusTrap();
+
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-panel" onClick={e => e.stopPropagation()}>
+      <div className="settings-panel" ref={trapRef} onClick={e => e.stopPropagation()}>
         <div className="settings-header">
           <span className="settings-title">Settings</span>
           <button className="settings-close" onClick={onClose} aria-label="Close settings">✕</button>
