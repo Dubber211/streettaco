@@ -245,8 +245,8 @@
   /* ── Floating Action Button (Add Truck) ── */
   .fab-add-truck {
     position: absolute;
-    bottom: 100px; right: 16px;
-    z-index: 950;
+    bottom: 124px; right: 16px;
+    z-index: 800;
     width: 56px; height: 56px;
     border-radius: 50%;
     background: linear-gradient(135deg, #06b6d4, #0891b2);
@@ -657,22 +657,23 @@
     box-shadow: 0 -4px 30px rgba(0,0,0,0.12);
   }
 
-  .bottom-sheet.snap-peek { max-height: 90px; }
+  .bottom-sheet.snap-peek { max-height: 110px; }
   .bottom-sheet.snap-half { max-height: 45vh; }
   .bottom-sheet.snap-full { max-height: 85vh; }
 
   .sheet-handle {
     display: flex;
     justify-content: center;
-    padding: 10px 0 4px;
+    padding: 14px 0 8px;
     cursor: grab;
     flex-shrink: 0;
     touch-action: none;
+    min-height: 44px;
   }
 
   .sheet-handle-bar {
-    width: 40px;
-    height: 4px;
+    width: 48px;
+    height: 5px;
     background: var(--text-dim);
     border-radius: 999px;
     opacity: 0.5;

@@ -10,7 +10,7 @@ export const STORAGE_KEYS = {
   radius: "street-taco-radius",
   addHistory: "street-taco-add-history",
   myTruckIds: "street-taco-my-trucks",
-  onboarding: "street-taco-onboarding-v3",
+  onboarding: "street-taco-onboarding-v4",
   theme: "street-taco-theme",
   favorites: "street-taco-favorites",
   confirmHistory: "street-taco-confirm-history",
@@ -55,10 +55,10 @@ export const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{
 
 export const ONBOARDING_STEPS = [
   { type: "modal", icon: "🚚", title: "Welcome to StreetTaco", body: "Real people spotting real trucks — right now, near you." },
-  { type: "spotlight", icon: "🗺️", title: "Your map", body: "This is where food trucks show up. Drag to explore, pinch to zoom, or search for a city.", target: ".map-wrapper", position: "bottom" },
-  { type: "spotlight", icon: "📍", title: "Spot a truck?", body: "Tap this to drop a pin and share a food truck you found with the community.", target: ".map-add-truck-overlay", position: "bottom-left" },
-  { type: "modal", icon: "🧭", title: "Get directions", body: "Tap the compass icon on any truck to open navigation in Google Maps or Apple Maps. We'll take you right to it!" },
-  { type: "spotlight", icon: "🗳️", title: "Community powered", body: "Each truck card shows votes, comments, and status. Tap to interact.", target: ".list-section", position: "top" },
+  { type: "spotlight", icon: "🗺️", title: "The map is your guide", body: "Food trucks appear right on the map. Drag to explore, pinch to zoom, or use the search pill to jump to a city.", target: ".floating-header", position: "bottom" },
+  { type: "spotlight", icon: "📍", title: "Spot a truck?", body: "Tap this button to drop a pin and share a food truck you found with the community.", target: ".fab-add-truck", position: "top-left" },
+  { type: "spotlight", icon: "📋", title: "Slide up for details", body: "Drag the panel up to browse nearby trucks, filter by favorites, and leave comments.", target: ".bottom-sheet", position: "top" },
+  { type: "modal", icon: "🧭", title: "Get directions", body: "Tap any truck on the map, then hit the Go button to open navigation and head straight there." },
   { type: "eula", icon: "📜", title: "End User License Agreement", body: "" },
   { type: "modal", icon: "🌮", title: "You're all set!", body: "Start exploring, add trucks you find, and help your community eat well." },
 ];
