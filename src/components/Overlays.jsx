@@ -95,25 +95,32 @@ export function ProximityPrompt({ userLocation, trucks, onConfirm }) {
   );
 }
 
-export function OnboardingOverlay({ onDismiss }) {
+export function OnboardingOverlay({ onDismiss, skipEula = false }) {
+  const steps = useMemo(() => skipEula ? ONBOARDING_STEPS.filter(s => s.type !== "eula") : ONBOARDING_STEPS, [skipEula]);
   const [step, setStep] = useState(0);
-  const current = ONBOARDING_STEPS[step];
-  const isLast = step === ONBOARDING_STEPS.length - 1;
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
   const isFirst = step === 0;
-  const totalSteps = ONBOARDING_STEPS.length;
+  const totalSteps = steps.length;
 
   useEffect(() => {
-    function handleKey(e) { if (e.key === "Escape") { isLast ? onDismiss() : setStep(ONBOARDING_STEPS.findIndex(s => s.type === "eula")); } }
+    function handleKey(e) {
+      if (e.key === "Escape") {
+        if (isLast) { onDismiss(); return; }
+        const eulaIdx = steps.findIndex(s => s.type === "eula");
+        setStep(eulaIdx >= 0 ? eulaIdx : steps.length - 1);
+      }
+    }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [isLast, onDismiss]);
+  }, [isLast, onDismiss, steps]);
 
   const trapRef = useFocusTrap();
 
   const [targetRect, setTargetRect] = useState(null);
 
   useEffect(() => {
-    const cur = ONBOARDING_STEPS[step];
+    const cur = steps[step];
     function measure() {
       if (cur.type === "spotlight" && cur.target) {
         const el = document.querySelector(cur.target);
@@ -139,7 +146,7 @@ export function OnboardingOverlay({ onDismiss }) {
     return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
   }, [step]);
 
-  const eulaStepIndex = ONBOARDING_STEPS.findIndex(s => s.type === "eula");
+  const eulaStepIndex = steps.findIndex(s => s.type === "eula");
 
   function getTooltipStyle() {
     if (!targetRect) return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
@@ -221,7 +228,7 @@ export function OnboardingOverlay({ onDismiss }) {
               {isLast ? "Let's go!" : isFirst ? "Show me around" : "Next"}
             </button>
           </div>
-          {step < eulaStepIndex && <button className="btn-onboarding-skip" onClick={() => setStep(eulaStepIndex)}>Skip</button>}
+          {!isLast && (eulaStepIndex < 0 || step < eulaStepIndex) && <button className="btn-onboarding-skip" onClick={() => setStep(eulaStepIndex >= 0 ? eulaStepIndex : steps.length - 1)}>Skip</button>}
         </div>
       </div>
     );
@@ -249,7 +256,7 @@ export function OnboardingOverlay({ onDismiss }) {
             {isLast ? "Let's go!" : "Next"}
           </button>
         </div>
-        <button className="btn-onboarding-skip" onClick={() => setStep(eulaStepIndex)}>Skip</button>
+        <button className="btn-onboarding-skip" onClick={() => setStep(eulaStepIndex >= 0 ? eulaStepIndex : steps.length - 1)}>Skip</button>
       </div>
     </div>
   );

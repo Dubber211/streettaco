@@ -288,34 +288,74 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
     expired: trucks.filter(t => isTruckExpired(t)).length,
   }), [trucks]);
 
+  const [tab, setTab] = useState("trucks"); // "trucks" | "feedback" | "add"
+  const [feedbackCount, setFeedbackCount] = useState(0);
+  useEffect(() => {
+    supabase.from("feedback").select("id", { count: "exact", head: true }).eq("is_read", false)
+      .then(({ count }) => { if (count != null) setFeedbackCount(count); });
+  }, [tab]);
+
   return (
     <div className="admin-panel">
-      <div className="admin-bar">
-        <span className="admin-bar-title">🔐 Admin Mode</span>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn-admin-logout" style={{ background: "var(--cyan)", color: "#fff", borderColor: "var(--cyan)" }} onClick={() => setShowAddForm(f => !f)}>+ Add Truck</button>
-          {missingCount > 0 && (
-            <button className="btn-admin-logout" onClick={handleBackfill} disabled={backfilling}>
-              {backfilling ? "Backfilling…" : `Backfill (${missingCount})`}
-            </button>
-          )}
-          <button className="btn-admin-logout" onClick={onLogout}>Logout</button>
+      {/* ── Header ── */}
+      <div className="admin-header">
+        <div className="admin-header-top">
+          <div className="admin-header-brand">
+            <span className="admin-header-title">🌮 StreetTaco</span>
+            <span className="admin-header-sub">Admin</span>
+          </div>
+          <div className="admin-header-actions">
+            {missingCount > 0 && (
+              <button className="admin-pill-btn" onClick={handleBackfill} disabled={backfilling}>
+                {backfilling ? "Backfilling…" : `📍 Backfill (${missingCount})`}
+              </button>
+            )}
+            <button className="admin-pill-btn admin-pill-logout" onClick={onLogout}>Logout</button>
+          </div>
         </div>
+
+        {/* ── Stats row ── */}
+        <div className="admin-stats">
+          <div className="admin-stat"><span className="admin-stat-num">{trucks.length}</span><span className="admin-stat-label">Total</span></div>
+          <div className={`admin-stat ${filterCounts.pending > 0 ? "admin-stat-alert" : ""}`}><span className="admin-stat-num">{filterCounts.pending}</span><span className="admin-stat-label">Pending</span></div>
+          <div className="admin-stat"><span className="admin-stat-num">{filterCounts.hidden}</span><span className="admin-stat-label">Hidden</span></div>
+          <div className="admin-stat"><span className="admin-stat-num">{filterCounts.expired}</span><span className="admin-stat-label">Expired</span></div>
+        </div>
+
+        {/* ── Tabs ── */}
+        <div className="admin-tabs">
+          <button className={`admin-tab ${tab === "trucks" ? "active" : ""}`} onClick={() => setTab("trucks")}>🚚 Trucks</button>
+          <button className={`admin-tab ${tab === "feedback" ? "active" : ""}`} onClick={() => setTab("feedback")}>💬 Feedback{feedbackCount > 0 && <span className="admin-badge pending" style={{ marginLeft: 6 }}>{feedbackCount}</span>}</button>
+          <button className={`admin-tab ${tab === "add" ? "active" : ""}`} onClick={() => { setTab("add"); setShowAddForm(true); }}>+ Add</button>
+        </div>
+
+        {/* ── Filters (inside sticky header) ── */}
+        {tab === "trucks" && (
+          <div className="admin-filters">
+            <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All</button>
+            <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>Pending</button>
+            <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden</button>
+            <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified</button>
+            <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired</button>
+          </div>
+        )}
       </div>
 
-      <AdminMap
+      {/* ── Map (hidden on feedback tab) ── */}
+      {tab !== "feedback" && <AdminMap
         trucks={filtered}
         focusRequest={adminFocusRequest}
-        addMode={showAddForm}
+        addMode={showAddForm && tab === "add"}
         editMode={editingId !== null}
         addPin={editingId ? editPin : addPin}
         onPickLocation={pos => {
           if (editingId) { setEditPin(pos); showToast("Pin moved!"); }
           else { setAddPin(pos); showToast("Pin dropped!"); }
         }}
-      />
+      />}
 
-      {showAddForm && (
+      {/* ── Add Truck Tab ── */}
+      {tab === "add" && (
         <div className="admin-add-form">
           <div className="admin-add-title">Add Truck (no limits)</div>
           <div className="admin-add-grid">
@@ -343,96 +383,96 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
           <ScheduleInput value={addHours} onChange={setAddHours} />
           <div className="admin-btn-row" style={{ marginTop: 12 }}>
             <button className="btn-admin-action verify" onClick={handleAdminAdd} disabled={addSaving}>{addSaving ? "Saving…" : "Add Truck"}</button>
-            <button className="btn-admin-action" onClick={() => { setShowAddForm(false); setAddPin(null); }}>Cancel</button>
+            <button className="btn-admin-action" onClick={() => { setTab("trucks"); setShowAddForm(false); setAddPin(null); }}>Cancel</button>
           </div>
         </div>
       )}
 
-      <div className="admin-filters">
-        <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
-        <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>Pending ({filterCounts.pending})</button>
-        <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({filterCounts.hidden})</button>
-        <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({filterCounts.unverified})</button>
-        <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired ({filterCounts.expired})</button>
-      </div>
+      {/* ── Trucks Tab ── */}
+      {tab === "trucks" && (
+        <>
+          <div className="admin-truck-list">
+            {filtered.length === 0 && <div className="comments-empty" style={{ padding: 32 }}>No trucks match this filter.</div>}
+            {grouped.map(([location, locationTrucks]) => (
+              <div key={location} className="admin-group">
+                <div className="admin-group-header">{location} <span className="admin-group-count">{locationTrucks.length}</span></div>
+                {locationTrucks.map(truck => (
+                  <div key={truck.id} className={`admin-truck-row ${truck.isHidden ? "admin-hidden" : ""} ${!truck.isApproved ? "admin-pending-row" : ""}`}>
+                    <div className="admin-truck-main" onClick={() => { setExpandedTruck(e => e === truck.id ? null : truck.id); setAdminFocusRequest(prev => ({ id: truck.id, seq: (prev?.seq ?? 0) + 1 })); }}>
+                      <span className="admin-truck-emoji">{getFoodEmoji(truck.foodType)}</span>
+                      <div className="admin-truck-info">
+                        <div className="admin-truck-name">
+                          {truck.name}
+                          {truck.isVerified && <span className="admin-badge verified">Verified</span>}
+                          {!truck.isApproved && <span className="admin-badge pending">Pending</span>}
+                          {truck.isHidden && <span className="admin-badge hidden">Hidden</span>}
+                        </div>
+                        <div className="admin-truck-meta">
+                          {truck.foodType} · {truck.open ? "Open" : "Closed"} · {truck.votes} votes · {timeAgo(truck.createdAt)}
+                        </div>
+                      </div>
+                      <span className="admin-expand-icon">{expandedTruck === truck.id ? "▲" : "▼"}</span>
+                    </div>
 
-      <div className="admin-truck-list">
-        {filtered.length === 0 && <div className="comments-empty">No trucks match this filter.</div>}
-        {grouped.map(([location, locationTrucks]) => (
-          <div key={location} className="admin-group">
-            <div className="admin-group-header">{location} ({locationTrucks.length})</div>
-            {locationTrucks.map(truck => (
-          <div key={truck.id} className={`admin-truck-row ${truck.isHidden ? "admin-hidden" : ""}`}>
-            <div className="admin-truck-main" onClick={() => { setExpandedTruck(e => e === truck.id ? null : truck.id); setAdminFocusRequest(prev => ({ id: truck.id, seq: (prev?.seq ?? 0) + 1 })); }}>
-              <span className="admin-truck-emoji">{getFoodEmoji(truck.foodType)}</span>
-              <div className="admin-truck-info">
-                <div className="admin-truck-name">
-                  {truck.name}
-                  {truck.isVerified && <span className="admin-badge verified">Verified</span>}
-                  {!truck.isApproved && <span className="admin-badge pending">Pending</span>}
-                  {truck.isHidden && <span className="admin-badge hidden">Hidden</span>}
-                </div>
-                <div className="admin-truck-meta">
-                  {truck.foodType} · {truck.open ? "Open" : "Closed"} · {truck.votes} votes · {timeAgo(truck.createdAt)}
-                </div>
+                    {expandedTruck === truck.id && (
+                      <div className="admin-truck-actions">
+                        {editingId === truck.id ? (
+                          <div className="admin-edit-form">
+                            <div className="admin-add-grid">
+                              <input className="add-input" value={editName} maxLength={MAX_NAME_LENGTH} onChange={e => setEditName(e.target.value)} placeholder="Truck name" />
+                              <input className="add-input" value={editFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setEditFood(e.target.value)} placeholder="Food type" />
+                            </div>
+                            <label className="checkbox-row" style={{ margin: "8px 0" }}>
+                              <input type="checkbox" checked={editPermanent} onChange={e => setEditPermanent(e.target.checked)} />
+                              <span className="checkbox-label">📌 Permanent spot</span>
+                            </label>
+                            <div className="admin-add-location-label">Operating Hours:</div>
+                            <ScheduleInput value={editHours} onChange={setEditHours} />
+                            <div className="admin-add-location-label" style={{ marginTop: 10 }}>Location:</div>
+                            <div className="admin-pin-status">
+                              📍 {editPin[0].toFixed(4)}, {editPin[1].toFixed(4)}
+                              <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginLeft: 8 }}>Click the map above to move</span>
+                            </div>
+                            <div className="admin-btn-row" style={{ marginTop: 10 }}>
+                              <button className="btn-admin-action verify" onClick={saveEdit}>Save</button>
+                              <button className="btn-admin-action" onClick={() => setEditingId(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="admin-btn-row">
+                            {!truck.isApproved && <button className="btn-admin-action verify" onClick={() => onApprove(truck.id)}>✅ Approve</button>}
+                            {!truck.isApproved && <button className="btn-admin-action delete" onClick={() => onReject(truck.id)}>❌ Reject</button>}
+                            <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
+                              {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
+                            </button>
+                            <button className="btn-admin-action" onClick={() => startEdit(truck)}>✏️ Edit</button>
+                            <button className={`btn-admin-action ${truck.isHidden ? "restore" : "hide"}`} onClick={() => onToggleHide(truck.id, truck.isHidden)}>
+                              {truck.isHidden ? "👁 Restore" : "🚫 Hide"}
+                            </button>
+                            <button className="btn-admin-action delete" onClick={() => { if (window.confirm(`Permanently delete "${truck.name}"? This cannot be undone.`)) onDeleteTruck(truck.id); }}>
+                              🗑 Delete
+                            </button>
+                            {!truck.isPermanent && <button className="btn-admin-action restore" onClick={() => onReconfirm(truck.id)}>🔄 Re-confirm</button>}
+                          </div>
+                        )}
+                        <div className="admin-truck-detail">
+                          <span>ID: {truck.id}</span>
+                          <span>User: {truck.userId?.slice(0, 8)}…</span>
+                          <span>Coords: {truck.position[0].toFixed(4)}, {truck.position[1].toFixed(4)}</span>
+                        </div>
+                        <AdminComments truckId={truck.id} onHide={onHideComment} onUnhide={onUnhideComment} onDelete={onDeleteComment} />
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <span className="admin-expand-icon">{expandedTruck === truck.id ? "▲" : "▼"}</span>
-            </div>
+            ))}
+          </div>
+        </>
+      )}
 
-            {expandedTruck === truck.id && (
-              <div className="admin-truck-actions">
-                {editingId === truck.id ? (
-                  <div className="admin-edit-form">
-                    <div className="admin-add-grid">
-                      <input className="add-input" value={editName} maxLength={MAX_NAME_LENGTH} onChange={e => setEditName(e.target.value)} placeholder="Truck name" />
-                      <input className="add-input" value={editFood} maxLength={MAX_FOOD_LENGTH} onChange={e => setEditFood(e.target.value)} placeholder="Food type" />
-                    </div>
-                    <label className="checkbox-row" style={{ margin: "8px 0" }}>
-                      <input type="checkbox" checked={editPermanent} onChange={e => setEditPermanent(e.target.checked)} />
-                      <span className="checkbox-label">📌 Permanent spot</span>
-                    </label>
-                    <div className="admin-add-location-label">Operating Hours:</div>
-                    <ScheduleInput value={editHours} onChange={setEditHours} />
-                    <div className="admin-add-location-label" style={{ marginTop: 10 }}>Location:</div>
-                    <div className="admin-pin-status">
-                      📍 {editPin[0].toFixed(4)}, {editPin[1].toFixed(4)}
-                      <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginLeft: 8 }}>Click the map above to move</span>
-                    </div>
-                    <div className="admin-btn-row" style={{ marginTop: 10 }}>
-                      <button className="btn-admin-action verify" onClick={saveEdit}>Save</button>
-                      <button className="btn-admin-action" onClick={() => setEditingId(null)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="admin-btn-row">
-                    {!truck.isApproved && <button className="btn-admin-action verify" onClick={() => onApprove(truck.id)}>✅ Approve</button>}
-                    {!truck.isApproved && <button className="btn-admin-action delete" onClick={() => onReject(truck.id)}>❌ Reject</button>}
-                    <button className={`btn-admin-action ${truck.isVerified ? "unverify" : "verify"}`} onClick={() => onToggleVerify(truck.id, truck.isVerified)}>
-                      {truck.isVerified ? "✖ Unverify" : "✅ Verify"}
-                    </button>
-                    <button className="btn-admin-action" onClick={() => startEdit(truck)}>✏️ Edit</button>
-                    <button className={`btn-admin-action ${truck.isHidden ? "restore" : "hide"}`} onClick={() => onToggleHide(truck.id, truck.isHidden)}>
-                      {truck.isHidden ? "👁 Restore" : "🚫 Hide"}
-                    </button>
-                    <button className="btn-admin-action delete" onClick={() => { if (window.confirm(`Permanently delete "${truck.name}"? This cannot be undone.`)) onDeleteTruck(truck.id); }}>
-                      🗑 Delete
-                    </button>
-                    {!truck.isPermanent && <button className="btn-admin-action restore" onClick={() => onReconfirm(truck.id)}>🔄 Re-confirm</button>}
-                  </div>
-                )}
-                <div className="admin-truck-detail">
-                  <span>ID: {truck.id}</span>
-                  <span>User: {truck.userId?.slice(0, 8)}…</span>
-                  <span>Coords: {truck.position[0].toFixed(4)}, {truck.position[1].toFixed(4)}</span>
-                </div>
-                <AdminComments truckId={truck.id} onHide={onHideComment} onUnhide={onUnhideComment} onDelete={onDeleteComment} />
-              </div>
-            )}
-          </div>
-        ))}
-          </div>
-        ))}
-      </div>
+      {/* ── Feedback Tab ── */}
+      {tab === "feedback" && <AdminFeedback showToast={showToast} />}
     </div>
   );
 }
@@ -477,6 +517,55 @@ export function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
               const ok = await onDelete(c.id);
               if (ok) setComments(cur => cur.filter(x => x.id !== c.id));
             }}>🗑 Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Admin Feedback Viewer ────────────────────────────────────────────────── */
+export function AdminFeedback({ showToast }) {
+  const [feedback, setFeedback] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase.from("feedback").select("*").order("created_at", { ascending: false }).limit(50)
+      .then(({ data }) => { if (data) setFeedback(data); setLoaded(true); });
+  }, []);
+
+  async function markRead(id) {
+    await supabase.from("feedback").update({ is_read: true }).eq("id", id);
+    setFeedback(cur => cur.map(f => f.id === id ? { ...f, is_read: true } : f));
+  }
+
+  async function deleteFeedback(id) {
+    const { error } = await supabase.from("feedback").delete().eq("id", id);
+    if (error) showToast("Failed to delete feedback.");
+    else setFeedback(cur => cur.filter(f => f.id !== id));
+  }
+
+  return (
+    <div className="admin-feedback-tab">
+      {!loaded && <div className="comments-empty" style={{ padding: 32 }}>Loading feedback…</div>}
+      {loaded && feedback.length === 0 && (
+        <div className="list-empty" style={{ margin: 20 }}>
+          <div className="empty-icon">💬</div>
+          <p>No feedback yet. Users can send feedback from Settings.</p>
+        </div>
+      )}
+      {loaded && feedback.map(f => (
+        <div key={f.id} className={`admin-feedback-card ${f.is_read ? "" : "unread"}`}>
+          <div className="admin-feedback-body">
+            {!f.is_read && <span className="admin-badge pending">New</span>}
+            {f.body}
+          </div>
+          <div className="admin-feedback-meta">
+            {timeAgo(f.created_at)} · User {f.user_id?.slice(0, 8)}…
+          </div>
+          <div className="admin-btn-row">
+            {!f.is_read && <button className="btn-admin-action verify" onClick={() => markRead(f.id)}>✓ Read</button>}
+            <button className="btn-admin-action delete" onClick={() => deleteFeedback(f.id)}>🗑 Delete</button>
           </div>
         </div>
       ))}

@@ -56,8 +56,8 @@ export const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{
 export const ONBOARDING_STEPS = [
   { type: "modal", icon: "🚚", title: "Welcome to StreetTaco", body: "Real people spotting real trucks — right now, near you." },
   { type: "spotlight", icon: "🗺️", title: "The map is your guide", body: "Food trucks appear right on the map. Drag to explore, pinch to zoom, or use the search pill to jump to a city.", target: ".floating-header", position: "bottom" },
-  { type: "spotlight", icon: "📍", title: "Spot a truck?", body: "Tap this button to drop a pin and share a food truck you found with the community.", target: ".fab-add-truck", position: "top-left" },
-  { type: "spotlight", icon: "📋", title: "Slide up for details", body: "Drag the panel up to browse nearby trucks, filter by favorites, and leave comments.", target: ".bottom-sheet", position: "top" },
+  { type: "modal", icon: "📍", title: "Spot a truck?", body: "See the + button in the corner? Tap it to drop a pin and share a food truck you found with the community." },
+  { type: "modal", icon: "📋", title: "Slide up for details", body: "The panel at the bottom has your truck list. Drag it up to browse nearby trucks, filter by favorites, and leave comments." },
   { type: "modal", icon: "🧭", title: "Get directions", body: "Tap any truck on the map, then hit the Go button to open navigation and head straight there." },
   { type: "eula", icon: "📜", title: "End User License Agreement", body: "" },
   { type: "modal", icon: "🌮", title: "You're all set!", body: "Start exploring, add trucks you find, and help your community eat well." },

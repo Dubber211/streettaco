@@ -41,7 +41,114 @@ function getUserId() {
   return id;
 }
 
-export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onShowOnboarding, userLocation, favorites }) {
+function EulaViewer({ onClose }) {
+  const trapRef = useFocusTrap();
+
+  useEffect(() => {
+    function handleKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="settings-overlay" onClick={onClose}>
+      <div className="eula-viewer" ref={trapRef} onClick={e => e.stopPropagation()}>
+        <div className="eula-viewer-header">
+          <span className="settings-title">📜 EULA</span>
+          <button className="settings-close" onClick={onClose} aria-label="Close EULA">✕</button>
+        </div>
+        <div className="eula-scroll">
+          <p><strong>Last updated:</strong> March 30, 2026</p>
+          <p>By using StreetTaco ("the App"), you agree to the following terms. If you do not agree, please do not use the App.</p>
+          <h4>1. Acceptance of Terms</h4>
+          <p>By accessing or using StreetTaco, you confirm that you have read, understood, and agree to be bound by this End User License Agreement.</p>
+          <h4>2. Use of the App</h4>
+          <p>StreetTaco is a community-driven platform for discovering and sharing food truck locations. You agree to use the App only for lawful purposes and in a manner that does not infringe the rights of others.</p>
+          <h4>3. User-Generated Content</h4>
+          <p>You are solely responsible for any content you submit, including truck listings, votes, comments, and status updates. You agree not to post false, misleading, offensive, or spam content. We reserve the right to remove any content at our discretion.</p>
+          <h4>4. No Warranty</h4>
+          <p>The App is provided "as is" without warranties of any kind. Food truck locations, hours, and availability are user-reported and may not be accurate. StreetTaco is not responsible for any inaccuracies.</p>
+          <h4>5. Limitation of Liability</h4>
+          <p>StreetTaco and its creators shall not be liable for any damages arising from your use of the App, including but not limited to inaccurate food truck information, food quality, or service issues.</p>
+          <h4>6. Privacy</h4>
+          <p>We collect minimal data necessary to operate the App. Location data is used only to show nearby food trucks and is not stored on our servers. Anonymous identifiers are used for voting and spam prevention.</p>
+          <h4>7. Changes to Terms</h4>
+          <p>We may update this agreement at any time. Continued use of the App after changes constitutes acceptance of the updated terms.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackForm({ onClose }) {
+  const trapRef = useFocusTrap();
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    function handleKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!body.trim() || sending) return;
+    setSending(true);
+    let uid = localStorage.getItem("street-taco-user-id");
+    if (!uid) { uid = crypto.randomUUID(); localStorage.setItem("street-taco-user-id", uid); }
+    const { error } = await supabase.from("feedback").insert({ user_id: uid, body: body.trim() });
+    setSending(false);
+    if (error) alert("Couldn't send feedback — try again.");
+    else setSent(true);
+  }
+
+  return (
+    <div className="settings-overlay" onClick={onClose}>
+      <div className="eula-viewer" ref={trapRef} onClick={e => e.stopPropagation()}>
+        <div className="eula-viewer-header">
+          <span className="settings-title">💬 Feedback</span>
+          <button className="settings-close" onClick={onClose} aria-label="Close feedback">✕</button>
+        </div>
+        <div style={{ padding: "20px" }}>
+          {sent ? (
+            <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>🎉</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 800, marginBottom: 8 }}>Thanks!</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Your feedback has been sent to the team.</div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: 14, lineHeight: 1.5 }}>
+                Found a bug? Have a suggestion? Let us know and we'll take a look.
+              </p>
+              <textarea
+                className="comment-textarea"
+                placeholder="What's on your mind?"
+                value={body}
+                onChange={e => setBody(e.target.value)}
+                maxLength={1000}
+                style={{ width: "100%", minHeight: 120 }}
+                autoFocus
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>{body.length}/1000</span>
+                <button type="submit" className="btn-edit-save" disabled={!body.trim() || sending} style={{ flex: "none", padding: "10px 20px" }}>
+                  {sending ? "Sending…" : "Send Feedback"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SettingsPanel({ theme, onToggleTheme, onClose, onShowOnboarding, userLocation, favorites }) {
+  const [showEula, setShowEula] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   // "pushed" tracks whether we have an active push subscription in the browser
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -228,17 +335,28 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
             <span>📖 App walkthrough</span>
             <span className="settings-arrow">→</span>
           </div>
-          <div className="settings-row" onClick={onShowEula}>
+          <div className="settings-row" onClick={() => setShowEula(true)}>
             <span>📜 End User License Agreement</span>
             <span className="settings-arrow">→</span>
           </div>
-          <div className="settings-row" onClick={() => window.open("mailto:support@streettaco.app")}>
+          {showEula && <EulaViewer onClose={() => setShowEula(false)} />}
+          <div className="settings-row" onClick={() => setShowFeedback(true)}>
             <span>💬 Help & Feedback</span>
             <span className="settings-arrow">→</span>
           </div>
+          {showFeedback && <FeedbackForm onClose={() => setShowFeedback(false)} />}
         </div>
 
-        <div className="settings-version">StreetTaco v2.5</div>
+        <div className="settings-section">
+          <div className="settings-section-title">Our Story</div>
+          <div className="settings-about">
+            <p>StreetTaco started with a simple moment — a friend was over, hungry, and said <em>"I wish I knew what food trucks were open right now."</em></p>
+            <p>That's it. That was the spark. We built StreetTaco to answer that exact question, powered by real people in real time.</p>
+            <p className="settings-about-privacy">🔒 <strong>Privacy first.</strong> No accounts required. No tracking. No selling your data. Your location stays on your device — we just use it to show you what's nearby.</p>
+          </div>
+        </div>
+
+        <div className="settings-version">StreetTaco v3.1</div>
       </div>
     </div>
   );

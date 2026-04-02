@@ -612,14 +612,13 @@ function App() {
   return (
     <>
       {showAdminLogin && <AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
-      {!onboardingDone && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} />}
+      {onboardingDone !== true && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={() => setOnboardingDone(true)} skipEula={onboardingDone === "walkthrough"} />}
       {showSettings && (
         <SettingsPanel
           theme={theme}
           onToggleTheme={toggleTheme}
           onClose={() => setShowSettings(false)}
-          onShowEula={() => { setShowSettings(false); setOnboardingDone(false); }}
-          onShowOnboarding={() => { setShowSettings(false); setOnboardingDone(false); }}
+          onShowOnboarding={() => { setShowSettings(false); setOnboardingDone("walkthrough"); }}
           userLocation={userLocation}
           favorites={favorites}
         />
