@@ -6,15 +6,15 @@ import { useFocusTrap } from "../hooks";
 
 export function Header({ theme, onToggleTheme, onOpenSettings }) {
   return (
-    <div className="header">
+    <div className="floating-header">
       <div className="header-logo">
         <img className="logo-icon-img" src="/logo.png" alt="StreetTaco" />
-        <div className="logo-text">
-          <h1>StreetTaco</h1>
-          <p>Find food trucks near you • Community powered</p>
+        <div className="header-brand">
+          <h1 className="header-title">StreetTaco</h1>
+          <span className="header-tagline">Real food trucks, right now</span>
         </div>
       </div>
-      <button className="btn-theme-toggle" onClick={onOpenSettings} title="Settings" aria-label="Settings">
+      <button className="btn-header-action" onClick={onOpenSettings} title="Settings" aria-label="Settings">
         ⚙️
       </button>
     </div>
@@ -246,18 +246,26 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowEula, onSho
 
 /* ─── Controls Bar ──────────────────────────────────────────────────────────── */
 export function ControlsBar({ searchText, setSearchText, radiusMiles, setRadiusMiles, onUseMyLocation, onLocationSearch, locationLoading }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+
   return (
-    <div className="controls-bar">
-      <button className="btn-location" onClick={onUseMyLocation} disabled={locationLoading}>
-        {locationLoading ? <span style={{ fontSize: "0.9em" }}>⌛</span> : <span className="location-dot" />}
-        {locationLoading ? "Locating…" : "My Location"}
+    <div className="floating-controls">
+      <button className="control-pill" onClick={onUseMyLocation} disabled={locationLoading} aria-label="My location">
+        {locationLoading ? "⌛" : <span className="location-dot" />}
       </button>
 
-      <form className="search-form" onSubmit={onLocationSearch}>
-        <input className="input-field" type="text" placeholder="City or ZIP…" value={searchText} onChange={e => setSearchText(e.target.value)} />
-        <button className="btn-go" type="submit">Go →</button>
-      </form>
+      {searchOpen ? (
+        <form className="control-search-form" onSubmit={(e) => { onLocationSearch(e); setSearchOpen(false); }}>
+          <input className="control-search-input" type="text" placeholder="City or ZIP…" value={searchText} onChange={e => setSearchText(e.target.value)} autoFocus onBlur={() => { if (!searchText) setSearchOpen(false); }} />
+          <button className="control-pill" type="submit" aria-label="Search">Go</button>
+        </form>
+      ) : (
+        <button className="control-pill" onClick={() => setSearchOpen(true)} aria-label="Search location">🔍</button>
+      )}
 
+      <select className="control-pill control-radius" value={radiusMiles} onChange={e => setRadiusMiles(Number(e.target.value))} aria-label="Search radius">
+        {RADIUS_OPTIONS.map(r => <option key={r} value={r}>{r} mi</option>)}
+      </select>
     </div>
   );
 }
@@ -281,7 +289,8 @@ export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckNa
   const step2Active = step1Done;
 
   return (
-    <div className="add-panel">
+    <div className="add-panel-sheet">
+      <div className="sheet-handle"><div className="sheet-handle-bar" /></div>
       <div className="add-panel-title">📍 Report a Truck</div>
 
       {/* Step Indicator */}

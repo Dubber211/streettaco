@@ -1,7 +1,39 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { supabase } from "../supabase";
 import { MAX_NAME_LENGTH, MAX_FOOD_LENGTH } from "../constants";
 import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity } from "../utils";
+
+/* ─── Bottom Sheet Hook ────────────────────────────────────────────────────── */
+function useBottomSheet() {
+  const [snap, setSnap] = useState("peek"); // "peek" | "half" | "full"
+  const sheetRef = useRef(null);
+  const dragRef = useRef({ startY: 0, startSnap: "peek" });
+
+  const onDragStart = useCallback((e) => {
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    dragRef.current = { startY: y, startSnap: snap };
+  }, [snap]);
+
+  const onDragEnd = useCallback((e) => {
+    const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+    const delta = y - dragRef.current.startY;
+    const prev = dragRef.current.startSnap;
+    if (Math.abs(delta) < 30) {
+      // Tap — cycle through snaps
+      setSnap(prev === "peek" ? "half" : prev === "half" ? "full" : "half");
+      return;
+    }
+    if (delta > 0) {
+      // Dragged down
+      setSnap(prev === "full" ? "half" : "peek");
+    } else {
+      // Dragged up
+      setSnap(prev === "peek" ? "half" : "full");
+    }
+  }, []);
+
+  return { snap, setSnap, sheetRef, onDragStart, onDragEnd };
+}
 
 export function PopupTopComment({ truckId }) {
   const [topComment, setTopComment] = useState(null);
@@ -287,15 +319,21 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
     return list;
   }, [visibleTrucks, searchText, showOpenOnly, showFavoritesOnly, favorites, activeFoodFilter, sortBy]);
 
+  const { snap, setSnap, sheetRef, onDragStart, onDragEnd } = useBottomSheet();
+
   return (
-    <div className="list-section">
-      <div className="list-header">
+    <div className={`bottom-sheet snap-${snap}`} ref={sheetRef}>
+      <div className="sheet-handle" onTouchStart={onDragStart} onTouchEnd={onDragEnd} onMouseDown={onDragStart} onMouseUp={onDragEnd}>
+        <div className="sheet-handle-bar" />
+      </div>
+      <div className="sheet-header" onClick={() => setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "half")}>
         <span className="list-title">Nearby Trucks</span>
         <span className="list-count">{displayed.length} found</span>
       </div>
 
+      <div className="sheet-content">
       <div className="list-search">
-        <input className="list-search-input" type="text" placeholder="Search trucks…" value={searchText} onChange={e => setSearchText(e.target.value)} />
+        <input className="list-search-input" type="text" placeholder="Search trucks…" value={searchText} onChange={e => setSearchText(e.target.value)} onFocus={() => setSnap("full")} />
         {searchText && <button className="list-search-clear" onClick={() => setSearchText("")} aria-label="Clear search">✕</button>}
       </div>
 
@@ -405,6 +443,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
           );
         })
       )}
+      </div>
     </div>
   );
 }

@@ -26,30 +26,15 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
   }, [trucks]);
 
   return (
-    <div className={`map-wrapper ${addMode ? "add-mode-active" : ""}`}>
-      {!addMode && (
-        <div className="map-add-truck-overlay">
-          <button className="btn-add-truck" onClick={onStartAddTruck} disabled={!canAdd} style={!canAdd ? { opacity: 0.5, cursor: "not-allowed", boxShadow: "none" } : {}}>
-            <span style={{ fontSize: "1.1em" }}>+</span> {canAdd ? "Add Truck" : "Limit Reached"}
-          </button>
-          {canAdd && addsRemaining <= 2 && (
-            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{addsRemaining} add{addsRemaining !== 1 ? "s" : ""} left today</span>
-          )}
-        </div>
-      )}
+    <div className="map-fullscreen">
       {addMode && <div className="add-mode-overlay">📍 Tap the map to drop a pin</div>}
-      <div className="map-radius-overlay">
-        <select value={radiusMiles} onChange={e => onRadiusChange(Number(e.target.value))}>
-          {RADIUS_OPTIONS.map(r => <option key={r} value={r}>{r} mi</option>)}
-        </select>
-      </div>
       {!addMode && visibleTrucks && visibleTrucks.length === 0 && trucks.length > 0 && (
         <div className="map-empty-overlay">
           <div className="map-empty-text">No trucks in this area</div>
           <button className="btn-find-nearest" onClick={onFindNearest}>📍 Find nearest truck</button>
         </div>
       )}
-      <MapContainer center={mapCenter} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+      <MapContainer center={mapCenter} zoom={12} scrollWheelZoom zoomControl={false} style={{ height: "100%", width: "100%" }}>
         <TileLayer
           key={theme}
           attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -83,35 +68,33 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
           return (
             <Marker key={truck.id} ref={el => { if (el) markerRefs.current[truck.id] = el; }} position={truck.position} icon={icon}>
               <Popup autoPan={false}>
-                <div className="popup-card">
-                  <div className="popup-header">
+                <div className={`popup-card ${truck.open ? "popup-open" : ""}`}>
+                  <div className="popup-top-row">
                     <div className="popup-emoji">{getFoodEmoji(truck.foodType)}</div>
-                    <div>
+                    <div className="popup-title-block">
                       <div className="popup-name">{truck.name}{truck.isVerified && <span title="Verified"> ✅</span>}</div>
-                      <div className="popup-type">{truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}</div>
+                      <div className="popup-type">{truck.street ? `${truck.foodType} · ${truck.street}` : truck.foodType}</div>
+                    </div>
+                    <div className={`popup-score ${truck.votes > 0 ? "positive" : truck.votes < 0 ? "negative" : ""}`}>
+                      <span className="popup-score-num">{truck.votes}</span>
+                      <span className="popup-score-label">votes</span>
                     </div>
                   </div>
+
                   <div className="popup-badges">
                     <span className={`badge ${truck.open ? "badge-open" : "badge-closed"}`} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "● Open" : "○ Closed"}</span>
-                    <span className={`badge ${truck.isPermanent ? "badge-perm" : "badge-mobile"}`}>{truck.isPermanent ? "📌 Permanent" : "🚚 Mobile"}</span>
-                    {isNearby && <span className="badge badge-nearby">📍 Nearby</span>}
+                    <span className="badge badge-dist">📏 {dist.toFixed(1)} mi</span>
+                    {truck.isPermanent
+                      ? <span className="badge badge-perm">📌 Permanent</span>
+                      : <span className="badge badge-mobile">🚚 {timeAgo(truck.lastConfirmedAt)}</span>
+                    }
                   </div>
-                  <div className="popup-meta">
-                    <span>⭐ {truck.votes} votes</span>
-                    <span>📏 {dist.toFixed(1)} mi</span>
-                    {truck.hours && <span>⏰ {formatSchedule(truck.hours)}</span>}
-                    {!truck.isPermanent && <span>📍 confirmed {timeAgo(truck.lastConfirmedAt)}</span>}
-                  </div>
-                  <PopupTopComment truckId={truck.id} />
+
+                  {truck.hours && <div className="popup-schedule">⏰ {formatSchedule(truck.hours)}</div>}
+
                   <div className="popup-actions">
-                    <button className={`btn-vote btn-vote-up ${up ? "voted" : ""}`} onClick={() => onVote(truck.id, 1)} disabled={up} aria-label="Upvote">
-                      😊
-                    </button>
-                    <button className={`btn-vote btn-vote-down ${down ? "voted" : ""}`} onClick={() => onVote(truck.id, -1)} disabled={down} aria-label="Downvote">
-                      😞
-                    </button>
-                    <button className="btn-vote btn-vote-nav" onClick={() => window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank")} aria-label="Navigate">
-                      🧭
+                    <button className="popup-action-btn popup-nav" onClick={() => window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank")} aria-label="Navigate">
+                      🧭 Go
                     </button>
                   </div>
                 </div>
@@ -123,9 +106,10 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
         {pendingPin && (
           <Marker position={pendingPin} icon={pendingIcon}>
             <Popup autoPan={false}>
-              <div className="popup-card">
-                <div style={{ color: "#06b6d4", fontWeight: 700, fontFamily: "var(--font-display)" }}>New truck pin</div>
-                <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: 4 }}>Fill in details on the left</div>
+              <div className="popup-card popup-pending">
+                <div className="popup-pending-icon">📍</div>
+                <div className="popup-pending-title">Pin dropped!</div>
+                <div className="popup-pending-sub">Fill in the details below</div>
               </div>
             </Popup>
           </Marker>
