@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, Popup, TileLayer, Circle } from "react-leaflet";
 import { RADIUS_OPTIONS, TILE_DARK, TILE_LIGHT } from "../constants";
-import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, timeAgo } from "../utils";
+import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, timeAgo, logEvent } from "../utils";
 import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOnDrag, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
 import { PopupTopComment } from "./TruckList";
 
@@ -93,7 +93,7 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
                   {truck.hours && <div className="popup-schedule">⏰ {formatSchedule(truck.hours)}</div>}
 
                   <div className="popup-actions">
-                    <button className="popup-action-btn popup-nav" onClick={() => window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank")} aria-label="Navigate">
+                    <button className="popup-action-btn popup-nav" onClick={() => { logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} aria-label="Navigate">
                       🧭 Go
                     </button>
                   </div>

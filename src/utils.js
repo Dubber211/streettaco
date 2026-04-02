@@ -4,6 +4,18 @@ import { DAY_LABELS, FOOD_EMOJIS, MOBILE_TRUCK_EXPIRATION_HOURS } from "./consta
 
 export const nowIso = () => new Date().toISOString();
 
+// Lightweight analytics — fire-and-forget insert to analytics_events
+export function logEvent(event, { truckId = null, metadata = {} } = {}) {
+  let uid = localStorage.getItem("street-taco-user-id");
+  if (!uid) { uid = crypto.randomUUID(); localStorage.setItem("street-taco-user-id", uid); }
+  supabase.from("analytics_events").insert({
+    user_id: uid,
+    event,
+    truck_id: truckId,
+    metadata,
+  }).then(() => {}, () => {}); // swallow errors silently
+}
+
 // Blocked words loaded from Supabase, with fallback
 let blockedWordsCache = [];
 

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback } from "react";
 import { supabase } from "../supabase";
 import { MAX_NAME_LENGTH, MAX_FOOD_LENGTH } from "../constants";
-import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity } from "../utils";
+import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity, logEvent } from "../utils";
 
 /* ─── Bottom Sheet Hook ────────────────────────────────────────────────────── */
 const SNAP_POINTS = { peek: 110, half: () => window.innerHeight * 0.45, full: () => window.innerHeight * 0.85 };
@@ -486,7 +486,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
                   )}
                   <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments" aria-label="Comments">💬{commentCounts[truck.id] ? <span className="comment-count-badge">{commentCounts[truck.id]}</span> : null}</button>
                   <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share" aria-label="Share">🔗</button>
-                  <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate" aria-label="Navigate">🧭</button>
+                  <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate" aria-label="Navigate">🧭</button>
                 </div>
               </div>
               {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}

@@ -1650,6 +1650,46 @@
 
   .admin-comment-actions { display: flex; gap: 4px; }
 
+  /* ── Admin Analytics ── */
+  .admin-analytics { padding: 16px 20px 40px; }
+
+  .analytics-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .analytics-card {
+    background: var(--surface2); border: 1.5px solid var(--cyan-border); border-radius: 12px;
+    padding: 16px; text-align: center; box-shadow: var(--cyan-glow-sm);
+  }
+  .analytics-card-title { font-size: 0.72rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .analytics-card-num { font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; color: var(--cyan); }
+  .analytics-card-sub { display: flex; justify-content: center; gap: 12px; font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; }
+
+  .analytics-section { margin-bottom: 24px; }
+  .analytics-section-title { font-family: var(--font-display); font-size: 0.9rem; font-weight: 800; color: var(--text-muted); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1.5px solid var(--cyan-border); }
+
+  .analytics-chart { display: flex; gap: 4px; align-items: flex-end; height: 120px; padding: 0 4px; }
+  .analytics-chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .analytics-bars { display: flex; gap: 2px; align-items: flex-end; width: 100%; height: 100px; }
+  .analytics-bar { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; transition: height 0.3s; }
+  .bar-opens { background: var(--cyan); }
+  .bar-navs { background: #a855f7; }
+  .bar-users { background: #22c55e; }
+  .analytics-chart-label { font-size: 0.55rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+  .analytics-legend { display: flex; gap: 16px; justify-content: center; margin-top: 10px; font-size: 0.75rem; color: var(--text-muted); }
+  .analytics-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+
+  .analytics-top-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: var(--surface2); border: 1.5px solid var(--cyan-border); border-radius: 10px;
+    margin-bottom: 6px; box-shadow: var(--cyan-glow-sm);
+  }
+  .analytics-top-rank { font-family: var(--font-display); font-weight: 800; color: var(--cyan); min-width: 28px; }
+  .analytics-top-name { flex: 1; font-weight: 600; font-size: 0.9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .analytics-top-count { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+
+  @media (max-width: 500px) {
+    .analytics-cards { grid-template-columns: 1fr; }
+  }
+
   .verified-badge { font-size: 0.8em; }
 
   /* ── Onboarding Overlay ── */

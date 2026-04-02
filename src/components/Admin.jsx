@@ -326,6 +326,7 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
         <div className="admin-tabs">
           <button className={`admin-tab ${tab === "trucks" ? "active" : ""}`} onClick={() => setTab("trucks")}>🚚 Trucks</button>
           <button className={`admin-tab ${tab === "feedback" ? "active" : ""}`} onClick={() => setTab("feedback")}>💬 Feedback{feedbackCount > 0 && <span className="admin-badge pending" style={{ marginLeft: 6 }}>{feedbackCount}</span>}</button>
+          <button className={`admin-tab ${tab === "analytics" ? "active" : ""}`} onClick={() => setTab("analytics")}>📊 Analytics</button>
           <button className={`admin-tab ${tab === "add" ? "active" : ""}`} onClick={() => { setTab("add"); setShowAddForm(true); }}>+ Add</button>
         </div>
 
@@ -342,7 +343,7 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
       </div>
 
       {/* ── Map (hidden on feedback tab) ── */}
-      {tab !== "feedback" && <AdminMap
+      {tab !== "feedback" && tab !== "analytics" && <AdminMap
         trucks={filtered}
         focusRequest={adminFocusRequest}
         addMode={showAddForm && tab === "add"}
@@ -473,6 +474,9 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
 
       {/* ── Feedback Tab ── */}
       {tab === "feedback" && <AdminFeedback showToast={showToast} />}
+
+      {/* ── Analytics Tab ── */}
+      {tab === "analytics" && <AdminAnalytics />}
     </div>
   );
 }
@@ -520,6 +524,168 @@ export function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ─── Admin Analytics ──────────────────────────────────────────────────────── */
+function AdminAnalytics() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const now = new Date();
+      const d7 = new Date(now - 7 * 86400000).toISOString();
+      const d30 = new Date(now - 30 * 86400000).toISOString();
+
+      // Fetch all analytics events
+      const { data: events } = await supabase.from("analytics_events").select("event, user_id, truck_id, created_at");
+      if (!events) { setLoading(false); return; }
+
+      // Unique users from analytics
+      const allUsers = new Set(events.map(e => e.user_id));
+
+      // Also count unique users from other tables
+      const [{ data: commentUsers }, { data: voteUsers }, { data: pushUsers }] = await Promise.all([
+        supabase.from("comments").select("user_id"),
+        supabase.from("user_votes").select("user_id"),
+        supabase.from("push_subscriptions").select("user_id"),
+      ]);
+      (commentUsers || []).forEach(r => allUsers.add(r.user_id));
+      (voteUsers || []).forEach(r => allUsers.add(r.user_id));
+      (pushUsers || []).forEach(r => allUsers.add(r.user_id));
+
+      // Active users (any analytics event in time window)
+      const active7 = new Set(events.filter(e => e.created_at >= d7).map(e => e.user_id)).size;
+      const active30 = new Set(events.filter(e => e.created_at >= d30).map(e => e.user_id)).size;
+
+      // App opens
+      const opens = events.filter(e => e.event === "app_open");
+      const opens7 = opens.filter(e => e.created_at >= d7).length;
+      const opens30 = opens.filter(e => e.created_at >= d30).length;
+
+      // Navigate clicks
+      const navs = events.filter(e => e.event === "navigate_click");
+      const navs7 = navs.filter(e => e.created_at >= d7).length;
+      const navs30 = navs.filter(e => e.created_at >= d30).length;
+
+      // Top navigated trucks
+      const truckNavCounts = {};
+      navs.forEach(e => { if (e.truck_id) truckNavCounts[e.truck_id] = (truckNavCounts[e.truck_id] || 0) + 1; });
+      const topNavTruckIds = Object.entries(truckNavCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+      // Fetch truck names for top navigated
+      let topNavTrucks = [];
+      if (topNavTruckIds.length) {
+        const { data: truckData } = await supabase.from("trucks").select("id, name, food_type").in("id", topNavTruckIds.map(([id]) => Number(id)));
+        const nameMap = {};
+        (truckData || []).forEach(t => { nameMap[t.id] = t; });
+        topNavTrucks = topNavTruckIds.map(([id, count]) => ({ id, count, truck: nameMap[id] || null }));
+      }
+
+      // Daily activity for last 14 days
+      const daily = [];
+      for (let i = 13; i >= 0; i--) {
+        const dayStart = new Date(now);
+        dayStart.setHours(0, 0, 0, 0);
+        dayStart.setDate(dayStart.getDate() - i);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayEnd.getDate() + 1);
+        const dayEvents = events.filter(e => e.created_at >= dayStart.toISOString() && e.created_at < dayEnd.toISOString());
+        daily.push({
+          label: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          opens: dayEvents.filter(e => e.event === "app_open").length,
+          navs: dayEvents.filter(e => e.event === "navigate_click").length,
+          users: new Set(dayEvents.map(e => e.user_id)).size,
+        });
+      }
+
+      setStats({
+        totalUsers: allUsers.size,
+        active7,
+        active30,
+        totalOpens: opens.length,
+        opens7,
+        opens30,
+        totalNavs: navs.length,
+        navs7,
+        navs30,
+        topNavTrucks,
+        daily,
+      });
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  if (loading) return <div className="comments-empty" style={{ padding: 32 }}>Loading analytics…</div>;
+  if (!stats) return <div className="comments-empty" style={{ padding: 32 }}>No analytics data yet.</div>;
+
+  const maxBar = Math.max(...stats.daily.map(d => Math.max(d.opens, d.navs, d.users, 1)));
+
+  return (
+    <div className="admin-analytics">
+      <div className="analytics-cards">
+        <div className="analytics-card">
+          <div className="analytics-card-title">Total Users</div>
+          <div className="analytics-card-num">{stats.totalUsers}</div>
+          <div className="analytics-card-sub">
+            <span>{stats.active7} active 7d</span>
+            <span>{stats.active30} active 30d</span>
+          </div>
+        </div>
+        <div className="analytics-card">
+          <div className="analytics-card-title">App Opens</div>
+          <div className="analytics-card-num">{stats.totalOpens}</div>
+          <div className="analytics-card-sub">
+            <span>{stats.opens7} last 7d</span>
+            <span>{stats.opens30} last 30d</span>
+          </div>
+        </div>
+        <div className="analytics-card">
+          <div className="analytics-card-title">Navigation Clicks</div>
+          <div className="analytics-card-num">{stats.totalNavs}</div>
+          <div className="analytics-card-sub">
+            <span>{stats.navs7} last 7d</span>
+            <span>{stats.navs30} last 30d</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="analytics-section">
+        <div className="analytics-section-title">Daily Activity (14 days)</div>
+        <div className="analytics-chart">
+          {stats.daily.map((d, i) => (
+            <div key={i} className="analytics-chart-col">
+              <div className="analytics-bars">
+                <div className="analytics-bar bar-opens" style={{ height: `${(d.opens / maxBar) * 100}%` }} title={`${d.opens} opens`} />
+                <div className="analytics-bar bar-navs" style={{ height: `${(d.navs / maxBar) * 100}%` }} title={`${d.navs} navigations`} />
+                <div className="analytics-bar bar-users" style={{ height: `${(d.users / maxBar) * 100}%` }} title={`${d.users} unique users`} />
+              </div>
+              <div className="analytics-chart-label">{d.label}</div>
+            </div>
+          ))}
+        </div>
+        <div className="analytics-legend">
+          <span><span className="analytics-legend-dot bar-opens" /> Opens</span>
+          <span><span className="analytics-legend-dot bar-navs" /> Navigations</span>
+          <span><span className="analytics-legend-dot bar-users" /> Users</span>
+        </div>
+      </div>
+
+      {stats.topNavTrucks.length > 0 && (
+        <div className="analytics-section">
+          <div className="analytics-section-title">Top Navigated Trucks</div>
+          {stats.topNavTrucks.map((t, i) => (
+            <div key={t.id} className="analytics-top-row">
+              <span className="analytics-top-rank">#{i + 1}</span>
+              <span className="analytics-top-name">{t.truck ? `${getFoodEmoji(t.truck.food_type)} ${t.truck.name}` : `Truck #${t.id}`}</span>
+              <span className="analytics-top-count">{t.count} clicks</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

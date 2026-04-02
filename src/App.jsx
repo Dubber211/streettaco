@@ -12,7 +12,7 @@ import {
 import {
   nowIso, containsProfanity, loadBlockedWords, isOpenBySchedule,
   reverseGeocode, nominatimFetch, toAppTruck, haversineMiles, hoursSince,
-  isTruckExpired, normalizeTruck,
+  isTruckExpired, normalizeTruck, logEvent,
 } from "./utils";
 
 import { useLocalStorageState } from "./hooks";
@@ -89,6 +89,7 @@ function App() {
 
   // Auth + initial data load + realtime
   useEffect(() => {
+    logEvent("app_open");
     async function init() {
       loadBlockedWords();
       const { data: { session } } = await supabase.auth.getSession();
