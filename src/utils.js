@@ -36,6 +36,14 @@ export function parseSchedule(hours) {
   return null;
 }
 
+function isValidTime(t) {
+  if (!t || typeof t !== "string") return false;
+  const parts = t.split(":");
+  if (parts.length < 2) return false;
+  const [h, m] = parts.map(Number);
+  return Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59;
+}
+
 export function isOpenBySchedule(hours) {
   const blocks = parseSchedule(hours);
   if (!blocks) return null;
@@ -44,6 +52,7 @@ export function isOpenBySchedule(hours) {
   const currentMins = now.getHours() * 60 + now.getMinutes();
   for (const b of blocks) {
     if (!b.days.includes(day)) continue;
+    if (!isValidTime(b.open) || !isValidTime(b.close)) continue;
     const [oh, om] = b.open.split(":").map(Number);
     const [ch, cm] = b.close.split(":").map(Number);
     const openMins = oh * 60 + (om || 0);
@@ -76,9 +85,19 @@ export function formatSchedule(hours) {
   }).join(" · ");
 }
 
+// Global rate limiter for Nominatim (max 1 request per second per their usage policy)
+let lastNominatimCall = 0;
+export async function nominatimFetch(url) {
+  const now = Date.now();
+  const wait = Math.max(0, 1100 - (now - lastNominatimCall));
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastNominatimCall = Date.now();
+  return fetch(url);
+}
+
 export async function reverseGeocode(lat, lng) {
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+    const res = await nominatimFetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
     const data = await res.json();
     const addr = data?.address || {};
     return {

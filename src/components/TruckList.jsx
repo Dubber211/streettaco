@@ -54,6 +54,22 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
     return () => { cancelled = true; };
   }, [truckId, userId]);
 
+  // Realtime: update comments when others post, edit, or delete
+  useEffect(() => {
+    const channel = supabase.channel(`comments-${truckId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "comments", filter: `truck_id=eq.${truckId}` }, payload => {
+        setComments(cur => cur.find(c => c.id === payload.new.id) ? cur : [...cur, payload.new]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "comments", filter: `truck_id=eq.${truckId}` }, payload => {
+        setComments(cur => cur.map(c => c.id === payload.new.id ? { ...c, ...payload.new } : c));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "comments", filter: `truck_id=eq.${truckId}` }, payload => {
+        setComments(cur => cur.filter(c => c.id !== payload.old.id));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [truckId]);
+
   const userAlreadyCommented = comments.some(c => c.user_id === userId);
 
   async function handlePost() {
@@ -67,7 +83,7 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
       .select()
       .single();
     if (error) alert("Couldn't post comment — try again.");
-    else { setComments(cur => [{ ...data, votes: 0 }, ...cur]); setDraft(""); }
+    else { setComments(cur => cur.find(c => c.id === data.id) ? cur : [{ ...data, votes: 0 }, ...cur]); setDraft(""); }
     setPosting(false);
   }
 

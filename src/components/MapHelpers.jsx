@@ -56,11 +56,13 @@ export function ClosePopupOnDrag() {
 
 export function MapBoundsTracker({ onBoundsChange }) {
   const map = useMap();
+  const timerRef = useRef(null);
   useEffect(() => {
     const update = () => { const b = map.getBounds(); onBoundsChange({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }); };
-    update();
-    map.on("moveend zoomend", update);
-    return () => map.off("moveend zoomend", update);
+    const debouncedUpdate = () => { clearTimeout(timerRef.current); timerRef.current = setTimeout(update, 150); };
+    update(); // initial bounds immediately
+    map.on("moveend zoomend", debouncedUpdate);
+    return () => { map.off("moveend zoomend", debouncedUpdate); clearTimeout(timerRef.current); };
   }, [map, onBoundsChange]);
   return null;
 }

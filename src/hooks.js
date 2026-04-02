@@ -7,7 +7,15 @@ function readStoredValue(key, fallback) {
 
 export function useLocalStorageState(key, fallback) {
   const [value, setValue] = useState(() => readStoredValue(key, fallback));
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }, [key, value]);
+  const prevKeyRef = useRef(key);
+  useEffect(() => {
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key;
+      setValue(readStoredValue(key, fallback));
+      return;
+    }
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  }, [key, value, fallback]);
   return [value, setValue];
 }
 

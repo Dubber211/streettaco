@@ -4,7 +4,7 @@ import L from "leaflet";
 import { useFocusTrap } from "../hooks";
 import { supabase } from "../supabase";
 import { DEFAULT_CENTER, TILE_LIGHT, MAX_NAME_LENGTH, MAX_FOOD_LENGTH, STORAGE_KEYS } from "../constants";
-import { getFoodEmoji, makeTruckIcon, adminPinIcon, formatSchedule, timeAgo, isOpenBySchedule, isTruckExpired, reverseGeocode } from "../utils";
+import { getFoodEmoji, makeTruckIcon, adminPinIcon, formatSchedule, timeAgo, isOpenBySchedule, isTruckExpired, reverseGeocode, nominatimFetch } from "../utils";
 import { FocusTruck } from "./MapHelpers";
 import { ScheduleInput } from "./MapHelpers";
 
@@ -198,7 +198,7 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
     try {
       const params = new URLSearchParams({ format: "jsonv2", limit: "1" });
       /^\d{5}$/.test(q) ? (params.set("postalcode", q), params.set("countrycodes", "us")) : params.set("q", q);
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      const res = await nominatimFetch(`https://nominatim.openstreetmap.org/search?${params}`);
       const data = await res.json();
       if (data.length) {
         setAddPin([Number(data[0].lat), Number(data[0].lon)]);
@@ -279,7 +279,14 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [filtered]);
 
-  const missingCount = trucks.filter(t => !t.city || !t.state).length;
+  const missingCount = useMemo(() => trucks.filter(t => !t.city || !t.state).length, [trucks]);
+
+  const filterCounts = useMemo(() => ({
+    pending: trucks.filter(t => !t.isApproved).length,
+    hidden: trucks.filter(t => t.isHidden).length,
+    unverified: trucks.filter(t => !t.isVerified && !t.isHidden).length,
+    expired: trucks.filter(t => isTruckExpired(t)).length,
+  }), [trucks]);
 
   return (
     <div className="admin-panel">
@@ -343,10 +350,10 @@ export function AdminPanel({ trucks, onToggleHide, onToggleVerify, onHideComment
 
       <div className="admin-filters">
         <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All ({trucks.length})</button>
-        <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>Pending ({trucks.filter(t => !t.isApproved).length})</button>
-        <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({trucks.filter(t => t.isHidden).length})</button>
-        <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({trucks.filter(t => !t.isVerified && !t.isHidden).length})</button>
-        <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired ({trucks.filter(t => isTruckExpired(t)).length})</button>
+        <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>Pending ({filterCounts.pending})</button>
+        <button className={`filter-btn ${filter === "hidden" ? "active" : ""}`} onClick={() => setFilter("hidden")}>Hidden ({filterCounts.hidden})</button>
+        <button className={`filter-btn ${filter === "unverified" ? "active" : ""}`} onClick={() => setFilter("unverified")}>Unverified ({filterCounts.unverified})</button>
+        <button className={`filter-btn ${filter === "expired" ? "active" : ""}`} onClick={() => setFilter("expired")}>Expired ({filterCounts.expired})</button>
       </div>
 
       <div className="admin-truck-list">

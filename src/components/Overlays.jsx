@@ -55,26 +55,27 @@ export function ProximityPrompt({ userLocation, trucks, onConfirm }) {
     return null;
   }, [userLocation, trucks, dismissed]);
 
+  const markDone = useCallback((truckId) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `${truckId}_${today}`;
+    setDismissed(prev => {
+      const updated = { ...prev, [key]: true };
+      Object.keys(updated).forEach(k => { if (!k.endsWith(today)) delete updated[k]; });
+      localStorage.setItem(PROXIMITY_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    setPrompt(null);
+  }, []);
+
   useEffect(() => {
     if (!nearbyTruck) { setPrompt(null); return; }
     if (pushSubscribed) {
-      // Send a push notification instead of showing in-app prompt
       sendProximityPush(nearbyTruck);
       markDone(nearbyTruck.id);
     } else {
       setPrompt(nearbyTruck);
     }
-  }, [nearbyTruck, pushSubscribed]);
-
-  function markDone(truckId) {
-    const today = new Date().toISOString().slice(0, 10);
-    const key = `${truckId}_${today}`;
-    const updated = { ...dismissed, [key]: true };
-    Object.keys(updated).forEach(k => { if (!k.endsWith(today)) delete updated[k]; });
-    setDismissed(updated);
-    localStorage.setItem(PROXIMITY_KEY, JSON.stringify(updated));
-    setPrompt(null);
-  }
+  }, [nearbyTruck, pushSubscribed, markDone]);
 
   // Don't show in-app prompt if push is subscribed or no nearby truck
   if (!prompt || pushSubscribed) return null;

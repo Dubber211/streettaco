@@ -11,7 +11,7 @@ import {
 
 import {
   nowIso, containsProfanity, loadBlockedWords, isOpenBySchedule,
-  reverseGeocode, toAppTruck, haversineMiles, hoursSince,
+  reverseGeocode, nominatimFetch, toAppTruck, haversineMiles, hoursSince,
   isTruckExpired, normalizeTruck,
 } from "./utils";
 
@@ -32,8 +32,9 @@ function App() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
   const showToast = useCallback((message) => {
-    const id = Date.now();
+    const id = ++toastIdRef.current;
     setToasts(cur => [...cur, { id, message }]);
     setTimeout(() => setToasts(cur => cur.filter(t => t.id !== id)), 3000);
   }, []);
@@ -239,7 +240,7 @@ function App() {
     try {
       const params = new URLSearchParams({ format: "jsonv2", limit: "1" });
       /^\d{5}$/.test(q) ? (params.set("postalcode", q), params.set("countrycodes", "us")) : params.set("q", q);
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      const res = await nominatimFetch(`https://nominatim.openstreetmap.org/search?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (!data.length) { showToast("No location found."); return; }
@@ -582,6 +583,8 @@ function App() {
     if (match) {
       setFocusRequest({ id: truckId, seq: 1 });
       showToast(`Jumped to ${match.name} 📍`);
+    } else {
+      showToast("That truck link is no longer available.");
     }
     window.history.replaceState({}, "", window.location.pathname);
   }, [loading, activeTrucks, showToast]);
