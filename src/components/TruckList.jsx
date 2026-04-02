@@ -10,7 +10,8 @@ function getSnapHeight(name) { const v = SNAP_POINTS[name]; return typeof v === 
 function useBottomSheet() {
   const [snap, setSnap] = useState("peek");
   const sheetRef = useRef(null);
-  const dragRef = useRef({ startY: 0, startHeight: 0, dragging: false });
+  const contentRef = useRef(null);
+  const dragRef = useRef({ startY: 0, startHeight: 0, dragging: false, fromContent: false });
 
   const applyTranslate = useCallback((h) => {
     const el = sheetRef.current;
@@ -24,15 +25,29 @@ function useBottomSheet() {
     const el = sheetRef.current;
     if (!el) return;
     el.style.transition = "none";
-    dragRef.current = { startY: y, startHeight: getSnapHeight(snap), dragging: false };
+    dragRef.current = { startY: y, startHeight: getSnapHeight(snap), dragging: false, fromContent: false };
+  }, [snap]);
+
+  const onContentDragStart = useCallback((e) => {
+    const scrollEl = contentRef.current;
+    if (!scrollEl || scrollEl.scrollTop > 0) return;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const el = sheetRef.current;
+    if (!el) return;
+    el.style.transition = "none";
+    dragRef.current = { startY: y, startHeight: getSnapHeight(snap), dragging: false, fromContent: true };
   }, [snap]);
 
   const onDragMove = useCallback((e) => {
     const y = e.touches ? e.touches[0].clientY : e.clientY;
     const d = dragRef.current;
+    if (!d.startY) return;
     const delta = d.startY - y;
+    // Content drags only work downward (closing)
+    if (d.fromContent && delta > 0) { d.startY = 0; return; }
     if (!d.dragging && Math.abs(delta) > 5) d.dragging = true;
     if (!d.dragging) return;
+    if (d.fromContent) e.preventDefault();
     const h = Math.max(getSnapHeight("peek"), Math.min(getSnapHeight("full"), d.startHeight + delta));
     applyTranslate(h);
   }, [applyTranslate]);
@@ -40,10 +55,11 @@ function useBottomSheet() {
   const onDragEnd = useCallback((e) => {
     const el = sheetRef.current;
     if (el) el.style.transition = "";
-    const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
     const d = dragRef.current;
+    if (!d.startY && d.fromContent) return;
+    const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
     if (!d.dragging) {
-      setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "half");
+      if (!d.fromContent) setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "half");
       return;
     }
     const delta = d.startY - y;
@@ -67,7 +83,7 @@ function useBottomSheet() {
     return () => window.removeEventListener("resize", onResize);
   }, [snap, applyTranslate]);
 
-  return { snap, setSnap, sheetRef, onDragStart, onDragMove, onDragEnd };
+  return { snap, setSnap, sheetRef, contentRef, onDragStart, onContentDragStart, onDragMove, onDragEnd };
 }
 
 export function PopupTopComment({ truckId }) {
@@ -354,19 +370,19 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
     return list;
   }, [visibleTrucks, searchText, showOpenOnly, showFavoritesOnly, favorites, activeFoodFilter, sortBy]);
 
-  const { snap, setSnap, sheetRef, onDragStart, onDragMove, onDragEnd } = useBottomSheet();
+  const { snap, setSnap, sheetRef, contentRef, onDragStart, onContentDragStart, onDragMove, onDragEnd } = useBottomSheet();
 
   return (
     <div className={`bottom-sheet snap-${snap}`} ref={sheetRef}>
       <div className="sheet-handle" onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onMouseDown={onDragStart} onMouseMove={onDragMove} onMouseUp={onDragEnd}>
         <div className="sheet-handle-bar" />
       </div>
-      <div className="sheet-header" onClick={() => setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "half")}>
+      <div className="sheet-header" onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onMouseDown={onDragStart} onMouseMove={onDragMove} onMouseUp={onDragEnd}>
         <span className="list-title">Nearby Trucks</span>
         <span className="list-count">{displayed.length} found</span>
       </div>
 
-      <div className="sheet-content">
+      <div className="sheet-content" ref={contentRef} onTouchStart={onContentDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
       <div className="list-search">
         <input className="list-search-input" type="text" placeholder="Search trucks…" value={searchText} onChange={e => setSearchText(e.target.value)} onFocus={() => setSnap("full")} />
         {searchText && <button className="list-search-clear" onClick={() => setSearchText("")} aria-label="Clear search">✕</button>}
