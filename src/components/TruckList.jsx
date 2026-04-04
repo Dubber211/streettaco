@@ -119,6 +119,7 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [sortBy, setSortBy] = useState("top");
+  const votingRef = useRef(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -173,15 +174,18 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
   async function handleCommentVote(commentId, vote) {
     const existing = commentVotes[commentId];
     if (existing === vote) return;
+    if (votingRef.current.has(commentId)) return;
+    votingRef.current.add(commentId);
 
     let delta = vote;
     if (existing) {
       const { error } = await supabase.from("comment_votes").delete().eq("comment_id", commentId).eq("user_id", userId);
-      if (error) { alert("Vote failed — try again."); return; }
+      if (error) { votingRef.current.delete(commentId); alert("Vote failed — try again."); return; }
       delta = vote - existing;
     }
 
     const { error } = await supabase.from("comment_votes").insert({ comment_id: commentId, user_id: userId, vote });
+    votingRef.current.delete(commentId);
     if (error) { alert("Vote failed — try again."); return; }
     const newVotes = (comments.find(c => c.id === commentId)?.votes || 0) + delta;
     await supabase.from("comments").update({ votes: newVotes }).eq("id", commentId);
@@ -413,7 +417,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
               ? <>No trucks in this radius yet.<br />Try zooming out or adding one!</>
               : <>No trucks match your filters.<br />Try clearing them.</>}
           </p>
-          {onFindNearest && <button className="btn-find-nearest" onClick={onFindNearest}>📍 Find nearest truck</button>}
+          {onFindNearest && <button className="btn-find-nearest" onClick={onFindNearest} aria-label="Find nearest truck">📍 Find nearest truck</button>}
         </div>
       ) : (
         displayed.map(truck => {

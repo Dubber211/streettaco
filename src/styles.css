@@ -518,7 +518,7 @@
 
   .schedule-section-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 10px 0 4px; }
   .schedule-input { margin: 8px 0; }
-  .schedule-block { margin-bottom: 10px; padding: 10px; background: var(--surface1); border: 1px solid var(--border); border-radius: 10px; }
+  .schedule-block { margin-bottom: 10px; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; }
   .schedule-block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .schedule-block-label { font-size: 0.72rem; font-weight: 600; color: var(--text-dim); }
   .schedule-block-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; }
@@ -1576,7 +1576,7 @@
   .admin-pending-row { border-left: 3px solid #f59e0b; }
 
   .admin-truck-list { padding: 0 20px 40px; }
-  .admin-truck-row { background: var(--surface1); border: 1.5px solid var(--cyan-border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; transition: all 0.2s; box-shadow: var(--cyan-glow-sm); }
+  .admin-truck-row { background: var(--surface2); border: 1.5px solid var(--cyan-border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; transition: all 0.2s; box-shadow: var(--cyan-glow-sm); }
   .admin-truck-row.admin-hidden { opacity: 0.5; }
   .admin-truck-main { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
   .admin-truck-main:hover { background: var(--surface2); box-shadow: var(--cyan-glow-md); }
@@ -1639,7 +1639,7 @@
 
   .admin-edit-form { padding: 4px 0 8px; }
 
-  .admin-add-form { padding: 16px 20px; background: var(--surface1); border-bottom: 1px solid var(--border); }
+  .admin-add-form { padding: 16px 20px; background: var(--surface2); border-bottom: 1px solid var(--border); }
   .admin-add-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 12px; }
   .admin-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .admin-add-location { margin: 12px 0; }
@@ -1806,7 +1806,7 @@
     line-height: 1.65;
     padding: 14px 16px;
     margin-bottom: 20px;
-    background: var(--surface1);
+    background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 10px;
   }
