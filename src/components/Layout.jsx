@@ -58,21 +58,27 @@ function EulaViewer({ onClose }) {
           <button className="settings-close" onClick={onClose} aria-label="Close EULA">✕</button>
         </div>
         <div className="eula-scroll">
-          <p><strong>Last updated:</strong> March 30, 2026</p>
+          <p><strong>Last updated:</strong> April 4, 2026</p>
           <p>By using StreetTaco ("the App"), you agree to the following terms. If you do not agree, please do not use the App.</p>
           <h4>1. Acceptance of Terms</h4>
           <p>By accessing or using StreetTaco, you confirm that you have read, understood, and agree to be bound by this End User License Agreement.</p>
-          <h4>2. Use of the App</h4>
+          <h4>2. Minimum Age Requirement</h4>
+          <p>You must be at least 13 years of age to use this App. By using StreetTaco, you represent and warrant that you are at least 13 years old. If you are under 13, you may not use the App. If you are between 13 and 18, you may use the App only with the consent of a parent or legal guardian.</p>
+          <h4>3. Use of the App</h4>
           <p>StreetTaco is a community-driven platform for discovering and sharing food truck locations. You agree to use the App only for lawful purposes and in a manner that does not infringe the rights of others.</p>
-          <h4>3. User-Generated Content</h4>
+          <h4>4. User-Generated Content</h4>
           <p>You are solely responsible for any content you submit, including truck listings, votes, comments, and status updates. You agree not to post false, misleading, offensive, or spam content. We reserve the right to remove any content at our discretion.</p>
-          <h4>4. No Warranty</h4>
+          <h4>5. Geolocation Data</h4>
+          <p>The App uses your device's geolocation solely to display nearby food trucks. Your location data is processed on your device and is not transmitted to, stored on, or retained by our servers. We do not share your location data with any third parties. You may disable location access at any time through your device or browser settings, though this may limit the App's functionality.</p>
+          <h4>6. Data Retention &amp; Local Storage</h4>
+          <p>StreetTaco stores user preferences and app state locally on your device using your browser's localStorage. This data never leaves your device and is not accessible to us or any third party. You may clear this data at any time by clearing your browser's site data or using your browser's storage settings. No personal information is retained on our servers from general app usage.</p>
+          <h4>7. Children's Privacy (COPPA Compliance)</h4>
+          <p>StreetTaco is a general audience app and is not directed at children under the age of 13. We do not knowingly collect, use, or disclose personal information from children under 13. If you are a parent or guardian and believe your child under 13 has provided personal information through the App, please contact us at <strong>privacy@streettaco.food</strong> and we will promptly delete any such information. If we become aware that we have inadvertently collected personal information from a child under 13, we will take steps to delete that information as soon as possible.</p>
+          <h4>8. No Warranty</h4>
           <p>The App is provided "as is" without warranties of any kind. Food truck locations, hours, and availability are user-reported and may not be accurate. StreetTaco is not responsible for any inaccuracies.</p>
-          <h4>5. Limitation of Liability</h4>
+          <h4>9. Limitation of Liability</h4>
           <p>StreetTaco and its creators shall not be liable for any damages arising from your use of the App, including but not limited to inaccurate food truck information, food quality, or service issues.</p>
-          <h4>6. Privacy</h4>
-          <p>We collect minimal data necessary to operate the App. Location data is used only to show nearby food trucks and is not stored on our servers. Anonymous identifiers are used for voting and spam prevention.</p>
-          <h4>7. Changes to Terms</h4>
+          <h4>10. Changes to Terms</h4>
           <p>We may update this agreement at any time. Continued use of the App after changes constitutes acceptance of the updated terms.</p>
         </div>
       </div>

@@ -20,7 +20,7 @@ import { useLocalStorageState } from "./hooks";
 import { lazy, Suspense } from "react";
 const AdminLoginModal = lazy(() => import("./components/Admin").then(m => ({ default: m.AdminLoginModal })));
 const AdminPanel = lazy(() => import("./components/Admin").then(m => ({ default: m.AdminPanel })));
-import { ProximityPrompt, OnboardingOverlay } from "./components/Overlays";
+import { ProximityPrompt, OnboardingOverlay, EulaReacceptOverlay } from "./components/Overlays";
 import { Header, ControlsBar, ToastContainer, AddTruckPanel, SettingsPanel } from "./components/Layout";
 import { TruckMap } from "./components/TruckMap";
 import { TruckList } from "./components/TruckList";
@@ -45,6 +45,7 @@ function App() {
   const [confirmHistory, setConfirmHistory] = useLocalStorageState(STORAGE_KEYS.confirmHistory, {});
   const [reportHistory, setReportHistory] = useLocalStorageState(STORAGE_KEYS.reportHistory, {});
   const [onboardingDone, setOnboardingDone] = useLocalStorageState(STORAGE_KEYS.onboarding, false);
+  const [eulaAccepted, setEulaAccepted] = useLocalStorageState(STORAGE_KEYS.eulaAccepted, false);
   const [theme, setTheme] = useLocalStorageState(STORAGE_KEYS.theme, "dark");
   const [favorites, setFavorites] = useLocalStorageState(STORAGE_KEYS.favorites, []);
 
@@ -723,6 +724,7 @@ function App() {
     <>
       {showAdminLogin && <Suspense fallback={null}><AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} /></Suspense>}
       {onboardingDone !== true && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={onboardingDone === "walkthrough" ? () => setOnboardingDone(true) : handleOnboardingComplete} skipEula={onboardingDone === "walkthrough"} />}
+      {onboardingDone === true && eulaAccepted !== true && !adminView && !showAdminLogin && <EulaReacceptOverlay onAccept={() => setEulaAccepted(true)} />}
       {showSettings && (
         <SettingsPanel
           theme={theme}

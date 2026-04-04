@@ -15,7 +15,7 @@ export const STORAGE_KEYS = {
   favorites: "street-taco-favorites",
   confirmHistory: "street-taco-confirm-history",
   reportHistory: "street-taco-report-history",
-  eulaAccepted: "street-taco-eula-accepted",
+  eulaAccepted: "street-taco-eula-accepted-v2",
   notifyNewTrucks: "street-taco-notify-new",
   notifyFavorites: "street-taco-notify-favorites",
 };
