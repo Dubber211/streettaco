@@ -1,14 +1,23 @@
-import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, Popup, TileLayer, Circle } from "react-leaflet";
-import { RADIUS_OPTIONS, TILE_DARK, TILE_LIGHT } from "../constants";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, Marker, Popup, TileLayer, Circle, useMapEvents } from "react-leaflet";
+import { RADIUS_OPTIONS, TILE_DARK, TILE_DARK_LABELS, TILE_LIGHT } from "../constants";
 import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, timeAgo, logEvent } from "../utils";
 import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOnDrag, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
 import { PopupTopComment } from "./TruckList";
+
+function UserPanDetector({ onPan }) {
+  useMapEvents({ dragstart: onPan, zoomstart: onPan });
+  return null;
+}
 
 export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme, visibleTrucks, onFindNearest }) {
   const pendingIcon = useMemo(() => makePendingIcon(), []);
   const markerRefs = useRef({});
   const skipFitRef = useRef(false);
+  const [userPanned, setUserPanned] = useState(false);
+
+  // Reset the panned flag when map center changes programmatically (search, location, etc.)
+  useEffect(() => { setUserPanned(false); }, [mapCenter]);
 
   // Pre-computed distance lookup from visibleTrucks to avoid redundant haversine calls
   const distanceMap = useMemo(() => {
@@ -28,10 +37,17 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
   return (
     <div className="map-fullscreen">
       {addMode && <div className="add-mode-overlay">📍 Tap the map to drop a pin</div>}
-      {!addMode && visibleTrucks && visibleTrucks.length === 0 && trucks.length > 0 && (
-        <div className="map-empty-overlay">
-          <div className="map-empty-text">No trucks in this area</div>
-          <button className="btn-find-nearest" onClick={onFindNearest}>📍 Find nearest truck</button>
+      {!addMode && !userPanned && visibleTrucks && visibleTrucks.length === 0 && trucks.length > 0 && (
+        <div className="map-empty-overlay" onClick={() => setUserPanned(true)}>
+          <div className="map-empty-card" onClick={e => e.stopPropagation()}>
+            <img src="/favicon.png" alt="StreetTaco" className="empty-logo" />
+            <div className="map-empty-title">No trucks nearby</div>
+            <div className="map-empty-sub">Try expanding your radius or searching a different area</div>
+            <div className="empty-actions">
+              <button className="btn-find-nearest" onClick={onFindNearest}>Find a truck</button>
+              {canAdd && <button className="btn-add-first" onClick={onStartAddTruck}>Add the first</button>}
+            </div>
+          </div>
         </div>
       )}
       <MapContainer center={mapCenter} zoom={12} scrollWheelZoom zoomControl={false} style={{ height: "100%", width: "100%" }}>
@@ -40,7 +56,15 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
           attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url={theme === "light" ? TILE_LIGHT : TILE_DARK}
         />
+        {theme === "dark" && (
+          <TileLayer
+            key="dark-labels"
+            url={TILE_DARK_LABELS}
+            className="labels-overlay"
+          />
+        )}
         <FitBoundsToRadius center={mapCenter} radiusMiles={radiusMiles} skipRef={skipFitRef} />
+        <UserPanDetector onPan={() => setUserPanned(true)} />
         <ClosePopupOnDrag />
         <MapBoundsTracker onBoundsChange={onBoundsChange} />
         <MapZoomRadiusSync radiusMiles={radiusMiles} onRadiusChange={onRadiusChange} skipRef={skipFitRef} />

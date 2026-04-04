@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, memo } from "react";
 import { supabase } from "../supabase";
 import { MAX_NAME_LENGTH, MAX_FOOD_LENGTH } from "../constants";
 import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity, logEvent } from "../utils";
@@ -298,7 +298,55 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
   );
 }
 
-export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment, onFindNearest }) {
+const TruckCard = memo(function TruckCard({ truck, up, down, isMine, isFav, commentsOpen, voteOpen, commentCount, onFocusTruck, onToggleFavorite, onToggleVote, onVote, onStartEdit, onDeleteTruck, onToggleComments, onShareTruck, onClosePopups, userId, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
+  return (
+    <div>
+      <div className={`truck-card${truck.open ? " truck-open" : ""}`} onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer" }}>
+        <div className={`truck-card-emoji ${truck.open ? "open" : "closed"}`}>
+          {getFoodEmoji(truck.foodType)}
+        </div>
+        <div className="truck-card-info">
+          <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "Open" : "Closed"}</span></div>
+          <div className="truck-card-sub">
+            {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}
+            &nbsp;·&nbsp; {truck.distance.toFixed(1)} mi
+          </div>
+          <div className="truck-card-hours">
+            {truck.isPermanent
+              ? truck.hours ? `📌 ${formatSchedule(truck.hours)}` : "📌 Permanent"
+              : `🚚 confirmed ${timeAgo(truck.lastConfirmedAt)}`}
+            &nbsp;&nbsp;
+            <span className={`score-pill ${truck.votes > 0 ? "positive" : truck.votes < 0 ? "negative" : ""}`}>
+              {truck.votes > 0 ? "▲" : truck.votes < 0 ? "▼" : "–"} {Math.abs(truck.votes)}
+            </span>
+          </div>
+        </div>
+        <div className="truck-card-actions">
+          <button className={`icon-btn icon-btn-fav ${isFav ? "favorited" : ""}`} onClick={e => { e.stopPropagation(); onClosePopups(); onToggleFavorite(truck.id); }} title="Favorite" aria-label="Favorite">{isFav ? "❤️" : "🤍"}</button>
+          <div style={{ position: "relative" }}>
+            <button className={`icon-btn icon-btn-vote ${up ? "voted-up" : down ? "voted-down" : ""}`} onClick={e => { e.stopPropagation(); onToggleVote(truck.id); }} title="Vote" aria-label="Vote">
+              {up ? "😊" : down ? "😞" : "🙂"}
+            </button>
+            {voteOpen && (
+              <div className="vote-popup" onClick={e => e.stopPropagation()}>
+                <button className="vote-popup-btn vote-popup-up" onClick={() => onVote(truck.id, 1)} disabled={up} title="Upvote" aria-label="Upvote">👍</button>
+                <button className="vote-popup-btn vote-popup-down" onClick={() => onVote(truck.id, -1)} disabled={down} title="Downvote" aria-label="Downvote">👎</button>
+              </div>
+            )}
+          </div>
+          {isMine && <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); onClosePopups(); onStartEdit(truck); }} title="Edit" aria-label="Edit truck">✏️</button>}
+          {isMine && <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); onClosePopups(); onDeleteTruck(truck.id); }} title="Delete" aria-label="Delete truck">🗑</button>}
+          <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); onClosePopups(); onToggleComments(truck.id); }} title="Comments" aria-label="Comments">💬{commentCount ? <span className="comment-count-badge">{commentCount}</span> : null}</button>
+          <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); onClosePopups(); onShareTruck(truck.id); }} title="Share" aria-label="Share">🔗</button>
+          <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate" aria-label="Navigate">🧭</button>
+        </div>
+      </div>
+      {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}
+    </div>
+  );
+});
+
+export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment, onFindNearest, onStartAddTruck, canAdd }) {
   const [showOpenOnly, setShowOpenOnly] = useState(true);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
@@ -399,6 +447,11 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
 
   const { snap, setSnap, sheetRef, contentRef, onDragStart, onContentDragStart, onDragMove, onDragEnd } = useBottomSheet();
 
+  const closePopups = useCallback(() => { setOpenVoteId(null); setOpenStatusId(null); }, []);
+  const toggleVote = useCallback((id) => { setOpenStatusId(null); setOpenVoteId(v => v === id ? null : id); }, []);
+  const toggleComments = useCallback((id) => { setOpenCommentsId(v => v === id ? null : id); }, []);
+  const handleVoteAndClose = useCallback((id, vote) => { onVote(id, vote); setOpenVoteId(null); }, [onVote]);
+
   return (
     <div className={`bottom-sheet snap-${snap}`} ref={sheetRef}>
       <div className="sheet-handle" onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onMouseDown={onDragStart} onMouseMove={onDragMove} onMouseUp={onDragEnd}>
@@ -434,19 +487,26 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
 
       {displayed.length === 0 ? (
         <div className="list-empty">
-          <div className="empty-icon">🔍</div>
+          {visibleTrucks.length === 0
+            ? <img src="/favicon.png" alt="StreetTaco" className="empty-logo" />
+            : <div className="empty-icon">🔍</div>}
+          <div className="list-empty-title">
+            {visibleTrucks.length === 0 ? "No trucks nearby" : "No matches"}
+          </div>
           <p>
             {visibleTrucks.length === 0
-              ? <>No trucks in this radius yet.<br />Try zooming out or adding one!</>
-              : <>No trucks match your filters.<br />Try clearing them.</>}
+              ? <>Try expanding your radius or adding a truck you've spotted!</>
+              : <>No trucks match your filters. Try clearing them.</>}
           </p>
-          {onFindNearest && <button className="btn-find-nearest" onClick={onFindNearest} aria-label="Find nearest truck">📍 Find nearest truck</button>}
+          {visibleTrucks.length === 0 && (
+            <div className="empty-actions">
+              {onFindNearest && <button className="btn-find-nearest" onClick={onFindNearest} aria-label="Find a truck">Find a truck</button>}
+              {canAdd && onStartAddTruck && <button className="btn-add-first" onClick={onStartAddTruck} aria-label="Add the first truck">Add the first</button>}
+            </div>
+          )}
         </div>
       ) : (
         displayed.map(truck => {
-          const up = userVotes[truck.id] === 1;
-          const down = userVotes[truck.id] === -1;
-          const isMine = myTruckIds.includes(truck.id);
           const isEditing = editingId === truck.id;
 
           if (isEditing) return (
@@ -468,56 +528,31 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
             </div>
           );
 
-          const commentsOpen = openCommentsId === truck.id;
-
           return (
-            <div key={truck.id}>
-              <div className={`truck-card${truck.open ? " truck-open" : ""}`} onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer" }}>
-                <div className={`truck-card-emoji ${truck.open ? "open" : "closed"}`}>
-                  {getFoodEmoji(truck.foodType)}
-                </div>
-                <div className="truck-card-info">
-                  <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "Open" : "Closed"}</span></div>
-                  <div className="truck-card-sub">
-                    {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}
-                    &nbsp;·&nbsp; {truck.distance.toFixed(1)} mi
-                  </div>
-                  <div className="truck-card-hours">
-                    {truck.isPermanent
-                      ? truck.hours ? `📌 ${formatSchedule(truck.hours)}` : "📌 Permanent"
-                      : `🚚 confirmed ${timeAgo(truck.lastConfirmedAt)}`}
-                    &nbsp;&nbsp;
-                    <span className={`score-pill ${truck.votes > 0 ? "positive" : truck.votes < 0 ? "negative" : ""}`}>
-                      {truck.votes > 0 ? "▲" : truck.votes < 0 ? "▼" : "–"} {Math.abs(truck.votes)}
-                    </span>
-                  </div>
-                </div>
-                <div className="truck-card-actions">
-                  <button className={`icon-btn icon-btn-fav ${favorites.includes(truck.id) ? "favorited" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onToggleFavorite(truck.id); }} title="Favorite" aria-label="Favorite">{favorites.includes(truck.id) ? "❤️" : "🤍"}</button>
-                  <div style={{ position: "relative" }}>
-                    <button className={`icon-btn icon-btn-vote ${up ? "voted-up" : down ? "voted-down" : ""}`} onClick={e => { e.stopPropagation(); setOpenStatusId(null); setOpenVoteId(v => v === truck.id ? null : truck.id); }} title="Vote" aria-label="Vote">
-                      {up ? "😊" : down ? "😞" : "🙂"}
-                    </button>
-                    {openVoteId === truck.id && (
-                      <div className="vote-popup" onClick={e => e.stopPropagation()}>
-                        <button className={`vote-popup-btn vote-popup-up`} onClick={() => { onVote(truck.id, 1); setOpenVoteId(null); }} disabled={up} title="Upvote" aria-label="Upvote">👍</button>
-                        <button className={`vote-popup-btn vote-popup-down`} onClick={() => { onVote(truck.id, -1); setOpenVoteId(null); }} disabled={down} title="Downvote" aria-label="Downvote">👎</button>
-                      </div>
-                    )}
-                  </div>
-                  {isMine && (
-                    <button className="icon-btn icon-btn-edit" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); startEdit(truck); }} title="Edit" aria-label="Edit truck">✏️</button>
-                  )}
-                  {isMine && (
-                    <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onDeleteTruck(truck.id); }} title="Delete" aria-label="Delete truck">🗑</button>
-                  )}
-                  <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); setOpenCommentsId(v => v === truck.id ? null : truck.id); }} title="Comments" aria-label="Comments">💬{commentCounts[truck.id] ? <span className="comment-count-badge">{commentCounts[truck.id]}</span> : null}</button>
-                  <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); setOpenVoteId(null); setOpenStatusId(null); onShareTruck(truck.id); }} title="Share" aria-label="Share">🔗</button>
-                  <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate" aria-label="Navigate">🧭</button>
-                </div>
-              </div>
-              {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}
-            </div>
+            <TruckCard
+              key={truck.id}
+              truck={truck}
+              up={userVotes[truck.id] === 1}
+              down={userVotes[truck.id] === -1}
+              isMine={myTruckIds.includes(truck.id)}
+              isFav={favorites.includes(truck.id)}
+              commentsOpen={openCommentsId === truck.id}
+              voteOpen={openVoteId === truck.id}
+              commentCount={commentCounts[truck.id]}
+              onFocusTruck={onFocusTruck}
+              onToggleFavorite={onToggleFavorite}
+              onToggleVote={toggleVote}
+              onVote={handleVoteAndClose}
+              onStartEdit={startEdit}
+              onDeleteTruck={onDeleteTruck}
+              onToggleComments={toggleComments}
+              onShareTruck={onShareTruck}
+              onClosePopups={closePopups}
+              userId={userId}
+              isAdmin={isAdmin}
+              onAdminHideComment={onAdminHideComment}
+              onAdminDeleteComment={onAdminDeleteComment}
+            />
           );
         })
       )}

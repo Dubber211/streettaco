@@ -61,6 +61,7 @@ function App() {
   const [userVotes, setUserVotes] = useState({});
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [focusRequest, setFocusRequest] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -95,6 +96,7 @@ function App() {
     logEvent("app_open");
     cleanupLocalStorage([STORAGE_KEYS.confirmHistory, STORAGE_KEYS.reportHistory, STORAGE_KEYS.addHistory]);
     async function init() {
+      try {
       loadBlockedWords();
       const { data: { session } } = await supabase.auth.getSession();
       let uid = session?.user?.id;
@@ -106,8 +108,8 @@ function App() {
       setUserId(uid);
 
       const { data: truckRows, error: truckErr } = await supabase.from("trucks").select("*");
-      if (truckErr) { /* truck load failed — user sees empty state */ }
-      else if (truckRows) setTrucks(truckRows.map(toAppTruck));
+      if (truckErr) throw truckErr;
+      if (truckRows) setTrucks(truckRows.map(toAppTruck));
 
       if (uid) {
         const { data: voteRows } = await supabase.from("user_votes").select("truck_id, vote").eq("user_id", uid);
@@ -123,6 +125,10 @@ function App() {
       }
 
       setLoading(false);
+      } catch {
+        setLoadError(true);
+        setLoading(false);
+      }
     }
     init();
 
@@ -664,12 +670,26 @@ function App() {
   }, [activeTrucks, mapBounds, mapCenter, userLocation]);
 
   if (loading) return (
-    <>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "var(--font-display)", fontSize: "1.1rem", color: "var(--text-muted)" }}>
-        Loading StreetTaco…
+    <div className="loading-screen">
+      <img src="/favicon.png" alt="StreetTaco" className="loading-logo" />
+      <div className="loading-text">StreetTaco</div>
+      <div className="skeleton-list">
+        <div className="skeleton-card"><div className="skeleton-circle" /><div className="skeleton-lines"><div className="skeleton-line w60" /><div className="skeleton-line w40" /><div className="skeleton-line w80" /></div></div>
+        <div className="skeleton-card"><div className="skeleton-circle" /><div className="skeleton-lines"><div className="skeleton-line w80" /><div className="skeleton-line w50" /><div className="skeleton-line w60" /></div></div>
+        <div className="skeleton-card"><div className="skeleton-circle" /><div className="skeleton-lines"><div className="skeleton-line w50" /><div className="skeleton-line w70" /><div className="skeleton-line w40" /></div></div>
       </div>
-    </>
+    </div>
+  );
+
+  if (loadError) return (
+    <div className="loading-screen">
+      <img src="/favicon.png" alt="StreetTaco" className="loading-logo" />
+      <div className="loading-text">Couldn't connect</div>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", textAlign: "center", maxWidth: 260 }}>
+        We're having trouble reaching the server. Check your connection and try again.
+      </p>
+      <button className="btn-find-nearest" onClick={() => window.location.reload()} style={{ marginTop: 16 }}>Retry</button>
+    </div>
   );
 
   return (
@@ -730,7 +750,7 @@ function App() {
           <ProximityPrompt userLocation={userLocation} trucks={activeTrucks} onConfirm={handleConfirmStillHere} />
 
           {/* Truck list bottom sheet */}
-          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} />
+          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} />
         </div>
       )}
     </>

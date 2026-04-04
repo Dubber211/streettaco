@@ -73,6 +73,79 @@
   /* Only lock scroll when the map-app layout is active (not admin) */
   .map-app { overflow: hidden; }
 
+  /* ── Loading screen & skeletons ── */
+  .loading-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: var(--bg);
+    gap: 8px;
+  }
+  .loading-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    animation: pulse-glow 1.8s ease-in-out infinite;
+  }
+  .loading-text {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .skeleton-list {
+    width: 320px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .skeleton-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .skeleton-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--surface3);
+    flex-shrink: 0;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  .skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+  .skeleton-line {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--surface3);
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  .skeleton-line.w40 { width: 40%; }
+  .skeleton-line.w50 { width: 50%; }
+  .skeleton-line.w60 { width: 60%; }
+  .skeleton-line.w70 { width: 70%; }
+  .skeleton-line.w80 { width: 80%; }
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { filter: drop-shadow(0 0 6px var(--cyan-glow)); transform: scale(1); }
+    50% { filter: drop-shadow(0 0 16px var(--cyan)); transform: scale(1.05); }
+  }
+
   /* ── Full-viewport map app layout ── */
   .map-app {
     position: relative;
@@ -91,6 +164,8 @@
     height: 100% !important;
     width: 100% !important;
   }
+
+  .labels-overlay { filter: brightness(1.8); }
 
   /* ── Floating Header ── */
   .floating-header {
@@ -764,32 +839,49 @@
 
   .map-empty-overlay {
     position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
+    inset: 0;
     z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .map-empty-card {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
-    pointer-events: auto;
+    text-align: center;
+    gap: 6px;
+    padding: 28px 32px 24px;
+    cursor: default;
+    background: rgba(12, 13, 15, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1.5px solid var(--cyan-border);
+    border-radius: 20px;
+    box-shadow: var(--cyan-glow-sm), 0 8px 32px rgba(0,0,0,0.4);
+    animation: toast-in 0.25s ease;
   }
-  .map-empty-text {
+  .empty-logo { width: 48px; height: 48px; margin-bottom: 4px; border-radius: 12px; }
+  .map-empty-card .empty-icon { font-size: 2.5rem; margin-bottom: 4px; }
+  .map-empty-title {
     font-family: var(--font-display);
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 1.1rem;
+    font-weight: 700;
     color: var(--text);
-    background: rgba(12, 13, 15, 0.75);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    padding: 12px 22px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  .map-empty-sub {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    max-width: 220px;
   }
 
-  :root[data-theme="light"] .map-empty-text {
-    background: rgba(255,255,255,0.85);
+  :root[data-theme="light"] .map-empty-card {
+    background: rgba(255,255,255,0.9);
     border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   }
 
   /* (map-add-truck-overlay removed — now using fab-add-truck) */
@@ -1011,22 +1103,36 @@
   }
 
   .list-empty {
-    padding: 40px 24px;
+    padding: 36px 24px 28px;
     margin: 12px;
     text-align: center;
     color: var(--text-muted);
-    background: rgba(255,255,255,0.03);
-    border: 1px dashed rgba(255,255,255,0.08);
+    background: var(--surface2);
+    border: 1.5px solid var(--cyan-border);
     border-radius: 16px;
+    box-shadow: var(--cyan-glow-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    animation: card-in 0.3s ease;
   }
 
   :root[data-theme="light"] .list-empty {
-    background: rgba(0,0,0,0.02);
+    background: var(--surface2);
     border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   }
 
-  .list-empty .empty-icon { font-size: 3rem; margin-bottom: 14px; }
-  .list-empty p { font-size: 0.9rem; line-height: 1.5; }
+  .list-empty .empty-icon { font-size: 2.5rem; margin-bottom: 6px; }
+  .list-empty-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .list-empty p { font-size: 0.82rem; line-height: 1.5; max-width: 240px; }
 
   .btn-find-nearest {
     margin-top: 14px;
@@ -1043,11 +1149,34 @@
   }
   .btn-find-nearest:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--cyan-glow); }
 
+  .empty-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .empty-actions .btn-find-nearest { margin-top: 0; }
+
+  .btn-add-first {
+    padding: 10px 20px;
+    background: transparent;
+    color: var(--cyan);
+    border: 1.5px solid var(--cyan);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, background 0.15s;
+  }
+  .btn-add-first:hover { transform: translateY(-2px); background: rgba(6,182,212,0.1); }
+
   .truck-card {
     display: flex;
     align-items: center;
     gap: 14px;
     padding: 14px 18px;
+    animation: card-in 0.2s ease;
     margin: 4px 12px;
     border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.06);
