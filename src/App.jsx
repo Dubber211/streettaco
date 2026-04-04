@@ -17,7 +17,9 @@ import {
 
 import { useLocalStorageState } from "./hooks";
 
-import { AdminLoginModal, AdminPanel } from "./components/Admin";
+import { lazy, Suspense } from "react";
+const AdminLoginModal = lazy(() => import("./components/Admin").then(m => ({ default: m.AdminLoginModal })));
+const AdminPanel = lazy(() => import("./components/Admin").then(m => ({ default: m.AdminPanel })));
 import { ProximityPrompt, OnboardingOverlay } from "./components/Overlays";
 import { Header, ControlsBar, ToastContainer, AddTruckPanel, SettingsPanel } from "./components/Layout";
 import { TruckMap } from "./components/TruckMap";
@@ -286,8 +288,14 @@ function App() {
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (!data.length) { showToast("No location found."); return; }
+      const lat = Number(data[0].lat);
+      const lon = Number(data[0].lon);
+      if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        showToast("Invalid location returned. Try again.");
+        return;
+      }
       setUserLocation(null);
-      setMapCenter([Number(data[0].lat), Number(data[0].lon)]);
+      setMapCenter([lat, lon]);
       showToast(`Centered on ${q}.`);
     } catch { showToast("Location lookup failed."); }
   }
@@ -653,7 +661,7 @@ function App() {
 
   return (
     <>
-      {showAdminLogin && <AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
+      {showAdminLogin && <Suspense fallback={null}><AdminLoginModal onLogin={handleAdminLogin} onClose={() => setShowAdminLogin(false)} /></Suspense>}
       {onboardingDone !== true && !adminView && !showAdminLogin && <OnboardingOverlay onDismiss={onboardingDone === "walkthrough" ? () => setOnboardingDone(true) : handleOnboardingComplete} skipEula={onboardingDone === "walkthrough"} />}
       {showSettings && (
         <SettingsPanel
@@ -668,7 +676,7 @@ function App() {
 
       <ToastContainer toasts={toasts} />
       {adminView ? (
-        <AdminPanel
+        <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>Loading admin…</div>}><AdminPanel
           trucks={trucks.map(normalizeTruck)}
           onToggleHide={handleToggleHideTruck}
           onToggleVerify={handleToggleVerifyTruck}
@@ -683,7 +691,7 @@ function App() {
           onAddTruck={handleAdminAddTruck}
           onLogout={handleAdminLogout}
           showToast={showToast}
-        />
+        /></Suspense>
       ) : (
         <div className="map-app">
           {/* Map is the full-viewport background */}
