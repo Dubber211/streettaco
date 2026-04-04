@@ -118,6 +118,39 @@ export function formatSchedule(hours) {
   }).join(" · ");
 }
 
+export function getTodayHoursContext(hours) {
+  const blocks = parseSchedule(hours);
+  if (!blocks) return null;
+  const now = new Date();
+  const day = now.getDay();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+
+  // Find today's block
+  for (const b of blocks) {
+    if (!b.days.includes(day)) continue;
+    if (!isValidTime(b.open) || !isValidTime(b.close)) continue;
+    const [oh, om] = b.open.split(":").map(Number);
+    const [ch, cm] = b.close.split(":").map(Number);
+    const openMins = oh * 60 + (om || 0);
+    const closeMins = ch * 60 + (cm || 0);
+
+    const isOpen = closeMins > openMins
+      ? currentMins >= openMins && currentMins < closeMins
+      : currentMins >= openMins || currentMins < closeMins;
+
+    if (isOpen) {
+      const minsLeft = closeMins > currentMins ? closeMins - currentMins : (1440 - currentMins) + closeMins;
+      if (minsLeft <= 60) return `Closing in ${minsLeft} min`;
+      return `Open until ${to12h(b.close)}`;
+    } else if (currentMins < openMins) {
+      const minsUntil = openMins - currentMins;
+      if (minsUntil <= 60) return `Opens in ${minsUntil} min`;
+      return `Opens at ${to12h(b.open)}`;
+    }
+  }
+  return "Closed today";
+}
+
 // Global rate limiter for Nominatim (max 1 request per second per their usage policy)
 let lastNominatimCall = 0;
 export async function nominatimFetch(url) {

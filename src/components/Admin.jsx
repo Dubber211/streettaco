@@ -529,24 +529,48 @@ export function AdminComments({ truckId, onHide, onUnhide, onDelete }) {
 }
 
 /* ─── Admin Analytics ──────────────────────────────────────────────────────── */
+const PERIODS = { daily: 1, weekly: 7, monthly: 30 };
+
+function bucketEvents(events, period, numBuckets) {
+  const now = new Date();
+  const buckets = [];
+  for (let i = numBuckets - 1; i >= 0; i--) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - i * period);
+    const end = new Date(start);
+    end.setDate(end.getDate() + period);
+    const bucket = events.filter(e => e.created_at >= start.toISOString() && e.created_at < end.toISOString());
+    let label;
+    if (period === 1) label = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    else if (period === 7) label = `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    else label = start.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    buckets.push({
+      label,
+      opens: bucket.filter(e => e.event === "app_open").length,
+      navs: bucket.filter(e => e.event === "navigate_click").length,
+      users: new Set(bucket.map(e => e.user_id)).size,
+    });
+  }
+  return buckets;
+}
+
 function AdminAnalytics() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState("daily");
 
   useEffect(() => {
     async function load() {
       const now = new Date();
+      const d1 = new Date(now); d1.setHours(0, 0, 0, 0);
       const d7 = new Date(now - 7 * 86400000).toISOString();
       const d30 = new Date(now - 30 * 86400000).toISOString();
 
-      // Fetch all analytics events
       const { data: events } = await supabase.from("analytics_events").select("event, user_id, truck_id, created_at");
       if (!events) { setLoading(false); return; }
 
-      // Unique users from analytics
       const allUsers = new Set(events.map(e => e.user_id));
-
-      // Also count unique users from other tables
       const [{ data: commentUsers }, { data: voteUsers }, { data: pushUsers }] = await Promise.all([
         supabase.from("comments").select("user_id"),
         supabase.from("user_votes").select("user_id"),
@@ -556,26 +580,37 @@ function AdminAnalytics() {
       (voteUsers || []).forEach(r => allUsers.add(r.user_id));
       (pushUsers || []).forEach(r => allUsers.add(r.user_id));
 
-      // Active users (any analytics event in time window)
-      const active7 = new Set(events.filter(e => e.created_at >= d7).map(e => e.user_id)).size;
-      const active30 = new Set(events.filter(e => e.created_at >= d30).map(e => e.user_id)).size;
-
-      // App opens
       const opens = events.filter(e => e.event === "app_open");
-      const opens7 = opens.filter(e => e.created_at >= d7).length;
-      const opens30 = opens.filter(e => e.created_at >= d30).length;
-
-      // Navigate clicks
       const navs = events.filter(e => e.event === "navigate_click");
-      const navs7 = navs.filter(e => e.created_at >= d7).length;
-      const navs30 = navs.filter(e => e.created_at >= d30).length;
+
+      // Period counts
+      const todayStr = d1.toISOString();
+      const todayEvents = events.filter(e => e.created_at >= todayStr);
+      const week7Events = events.filter(e => e.created_at >= d7);
+      const month30Events = events.filter(e => e.created_at >= d30);
+
+      const periodCounts = {
+        daily: {
+          users: new Set(todayEvents.map(e => e.user_id)).size,
+          opens: todayEvents.filter(e => e.event === "app_open").length,
+          navs: todayEvents.filter(e => e.event === "navigate_click").length,
+        },
+        weekly: {
+          users: new Set(week7Events.map(e => e.user_id)).size,
+          opens: week7Events.filter(e => e.event === "app_open").length,
+          navs: week7Events.filter(e => e.event === "navigate_click").length,
+        },
+        monthly: {
+          users: new Set(month30Events.map(e => e.user_id)).size,
+          opens: month30Events.filter(e => e.event === "app_open").length,
+          navs: month30Events.filter(e => e.event === "navigate_click").length,
+        },
+      };
 
       // Top navigated trucks
       const truckNavCounts = {};
       navs.forEach(e => { if (e.truck_id) truckNavCounts[e.truck_id] = (truckNavCounts[e.truck_id] || 0) + 1; });
       const topNavTruckIds = Object.entries(truckNavCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-      // Fetch truck names for top navigated
       let topNavTrucks = [];
       if (topNavTruckIds.length) {
         const { data: truckData } = await supabase.from("trucks").select("id, name, food_type").in("id", topNavTruckIds.map(([id]) => Number(id)));
@@ -584,79 +619,76 @@ function AdminAnalytics() {
         topNavTrucks = topNavTruckIds.map(([id, count]) => ({ id, count, truck: nameMap[id] || null }));
       }
 
-      // Daily activity for last 14 days
-      const daily = [];
-      for (let i = 13; i >= 0; i--) {
-        const dayStart = new Date(now);
-        dayStart.setHours(0, 0, 0, 0);
-        dayStart.setDate(dayStart.getDate() - i);
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate() + 1);
-        const dayEvents = events.filter(e => e.created_at >= dayStart.toISOString() && e.created_at < dayEnd.toISOString());
-        daily.push({
-          label: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          opens: dayEvents.filter(e => e.event === "app_open").length,
-          navs: dayEvents.filter(e => e.event === "navigate_click").length,
-          users: new Set(dayEvents.map(e => e.user_id)).size,
-        });
-      }
-
       setStats({
         totalUsers: allUsers.size,
-        active7,
-        active30,
         totalOpens: opens.length,
-        opens7,
-        opens30,
         totalNavs: navs.length,
-        navs7,
-        navs30,
+        periodCounts,
         topNavTrucks,
-        daily,
+        events,
       });
       setLoading(false);
     }
     load();
   }, []);
 
+  const chart = useMemo(() => {
+    if (!stats) return [];
+    const p = PERIODS[period];
+    const numBuckets = period === "daily" ? 14 : period === "weekly" ? 8 : 6;
+    return bucketEvents(stats.events, p, numBuckets);
+  }, [stats, period]);
+
   if (loading) return <div className="comments-empty" style={{ padding: 32 }}>Loading analytics…</div>;
   if (!stats) return <div className="comments-empty" style={{ padding: 32 }}>No analytics data yet.</div>;
 
-  const maxBar = Math.max(...stats.daily.map(d => Math.max(d.opens, d.navs, d.users, 1)));
+  const pc = stats.periodCounts[period];
+  const periodLabel = period === "daily" ? "Today" : period === "weekly" ? "Last 7 days" : "Last 30 days";
+  const maxBar = Math.max(...chart.map(d => Math.max(d.opens, d.navs, d.users, 1)));
 
   return (
     <div className="admin-analytics">
+      <div className="analytics-period-toggle">
+        {["daily", "weekly", "monthly"].map(p => (
+          <button key={p} className={`filter-btn ${period === p ? "active" : ""}`} onClick={() => setPeriod(p)}>
+            {p === "daily" ? "Daily" : p === "weekly" ? "Weekly" : "Monthly"}
+          </button>
+        ))}
+      </div>
+
       <div className="analytics-cards">
         <div className="analytics-card">
-          <div className="analytics-card-title">Total Users</div>
-          <div className="analytics-card-num">{stats.totalUsers}</div>
+          <div className="analytics-card-title">Active Users</div>
+          <div className="analytics-card-num">{pc.users}</div>
           <div className="analytics-card-sub">
-            <span>{stats.active7} active 7d</span>
-            <span>{stats.active30} active 30d</span>
+            <span>{periodLabel}</span>
+            <span>{stats.totalUsers} all time</span>
           </div>
         </div>
         <div className="analytics-card">
           <div className="analytics-card-title">App Opens</div>
-          <div className="analytics-card-num">{stats.totalOpens}</div>
+          <div className="analytics-card-num">{pc.opens}</div>
           <div className="analytics-card-sub">
-            <span>{stats.opens7} last 7d</span>
-            <span>{stats.opens30} last 30d</span>
+            <span>{periodLabel}</span>
+            <span>{stats.totalOpens} all time</span>
           </div>
         </div>
         <div className="analytics-card">
           <div className="analytics-card-title">Navigation Clicks</div>
-          <div className="analytics-card-num">{stats.totalNavs}</div>
+          <div className="analytics-card-num">{pc.navs}</div>
           <div className="analytics-card-sub">
-            <span>{stats.navs7} last 7d</span>
-            <span>{stats.navs30} last 30d</span>
+            <span>{periodLabel}</span>
+            <span>{stats.totalNavs} all time</span>
           </div>
         </div>
       </div>
 
       <div className="analytics-section">
-        <div className="analytics-section-title">Daily Activity (14 days)</div>
+        <div className="analytics-section-title">
+          {period === "daily" ? "Daily Activity (14 days)" : period === "weekly" ? "Weekly Activity (8 weeks)" : "Monthly Activity (6 months)"}
+        </div>
         <div className="analytics-chart">
-          {stats.daily.map((d, i) => (
+          {chart.map((d, i) => (
             <div key={i} className="analytics-chart-col">
               <div className="analytics-bars">
                 <div className="analytics-bar bar-opens" style={{ height: `${(d.opens / maxBar) * 100}%` }} title={`${d.opens} opens`} />

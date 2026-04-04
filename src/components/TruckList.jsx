@@ -4,7 +4,7 @@ import { MAX_NAME_LENGTH, MAX_FOOD_LENGTH } from "../constants";
 import { getFoodEmoji, formatSchedule, timeAgo, containsProfanity, logEvent } from "../utils";
 
 /* ─── Bottom Sheet Hook ────────────────────────────────────────────────────── */
-const SNAP_POINTS = { peek: 110, half: () => window.innerHeight * 0.45, full: () => window.innerHeight * 0.85 };
+const SNAP_POINTS = { peek: 110, half: () => window.innerHeight * 0.45, full: () => window.innerHeight * 0.7 };
 function getSnapHeight(name) { const v = SNAP_POINTS[name]; return typeof v === "function" ? v() : v; }
 
 function useBottomSheet() {
@@ -47,7 +47,8 @@ function useBottomSheet() {
     if (d.fromContent && delta > 0) { d.startY = 0; return; }
     if (!d.dragging && Math.abs(delta) > 5) d.dragging = true;
     if (!d.dragging) return;
-    if (d.fromContent) e.preventDefault();
+    // Prevent pull-to-refresh and other browser gestures during drag
+    if (e.cancelable) e.preventDefault();
     const h = Math.max(getSnapHeight("peek"), Math.min(getSnapHeight("full"), d.startHeight + delta));
     applyTranslate(h);
   }, [applyTranslate]);

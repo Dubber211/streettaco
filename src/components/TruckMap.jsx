@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, Circle, useMapEvents } from "react-leaflet";
 import { RADIUS_OPTIONS, TILE_DARK, TILE_DARK_LABELS, TILE_LIGHT } from "../constants";
-import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, timeAgo, logEvent } from "../utils";
+import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, getTodayHoursContext, timeAgo, logEvent } from "../utils";
 import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOnDrag, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
 import { PopupTopComment } from "./TruckList";
 
@@ -114,7 +114,15 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
                     }
                   </div>
 
-                  {truck.hours && <div className="popup-schedule">⏰ {formatSchedule(truck.hours)}</div>}
+                  {truck.hours && (() => {
+                    const ctx = getTodayHoursContext(truck.hours);
+                    return (
+                      <div className="popup-schedule">
+                        ⏰ {formatSchedule(truck.hours)}
+                        {ctx && <span className={`popup-hours-context ${ctx.startsWith("Closing") ? "closing-soon" : ""}`}> · {ctx}</span>}
+                      </div>
+                    );
+                  })()}
 
                   <div className="popup-actions">
                     <button className="popup-action-btn popup-nav" onClick={() => { logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} aria-label="Navigate">

@@ -359,7 +359,7 @@
   /* ── Floating Action Button (Add Truck) ── */
   .fab-add-truck {
     position: absolute;
-    bottom: 124px; right: 16px;
+    bottom: 140px; right: 16px;
     z-index: 800;
     width: 56px; height: 56px;
     border-radius: 50%;
@@ -769,7 +769,7 @@
   .bottom-sheet {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    height: 85vh;
+    height: 70vh;
     z-index: 900;
     background: rgba(12, 13, 15, 0.92);
     backdrop-filter: blur(24px);
@@ -782,6 +782,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    overscroll-behavior: contain;
   }
 
   :root[data-theme="light"] .bottom-sheet {
@@ -798,10 +799,12 @@
     flex-shrink: 0;
     touch-action: none;
     min-height: 44px;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .sheet-handle-bar {
-    width: 48px;
+    width: 56px;
     height: 5px;
     background: var(--cyan);
     border-radius: 999px;
@@ -816,6 +819,9 @@
     padding: 6px 20px 10px;
     cursor: pointer;
     flex-shrink: 0;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .sheet-content {
@@ -1024,6 +1030,8 @@
   .badge-dist { background: rgba(148,163,184,0.1); color: var(--text-muted); border-color: rgba(148,163,184,0.15); }
 
   .popup-schedule { font-size: 0.72rem; color: var(--popup-muted); margin-bottom: 8px; }
+  .popup-hours-context { font-weight: 700; color: #22c55e; }
+  .popup-hours-context.closing-soon { color: #f59e0b; }
 
   .popup-top-comment {
     margin-bottom: 10px;
@@ -1197,16 +1205,17 @@
 
   .btn-add-first {
     padding: 10px 20px;
-    background: transparent;
-    color: var(--cyan);
-    border: 1.5px solid var(--cyan);
+    background: var(--cyan);
+    color: #fff;
+    border: none;
     border-radius: 10px;
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
-    transition: transform 0.15s, background 0.15s;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 16px var(--cyan-glow);
   }
-  .btn-add-first:hover { transform: translateY(-2px); background: rgba(6,182,212,0.1); }
+  .btn-add-first:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--cyan-glow); }
 
   .truck-card {
     display: flex;
@@ -1907,6 +1916,8 @@
 
   /* ── Admin Analytics ── */
   .admin-analytics { padding: 16px 20px 40px; }
+
+  .analytics-period-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
 
   .analytics-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
   .analytics-card {
