@@ -298,17 +298,24 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
   );
 }
 
-const TruckCard = memo(function TruckCard({ truck, up, down, isMine, isFav, commentsOpen, voteOpen, commentCount, onFocusTruck, onToggleFavorite, onToggleVote, onVote, onStartEdit, onDeleteTruck, onToggleComments, onShareTruck, onClosePopups, userId, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
+function Highlight({ text, query }) {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return <>{text.slice(0, idx)}<mark className="search-highlight">{text.slice(idx, idx + query.length)}</mark>{text.slice(idx + query.length)}</>;
+}
+
+const TruckCard = memo(function TruckCard({ truck, index, up, down, isMine, isFav, commentsOpen, voteOpen, commentCount, searchQuery, onFocusTruck, onToggleFavorite, onToggleVote, onVote, onStartEdit, onDeleteTruck, onToggleComments, onShareTruck, onClosePopups, userId, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
   return (
     <div>
-      <div className={`truck-card${truck.open ? " truck-open" : ""}`} onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer" }}>
+      <div className={`truck-card${truck.open ? " truck-open" : ""}`} onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer", animationDelay: `${Math.min(index, 8) * 40}ms` }}>
         <div className={`truck-card-emoji ${truck.open ? "open" : "closed"}`}>
           {getFoodEmoji(truck.foodType)}
         </div>
         <div className="truck-card-info">
-          <div className="truck-card-name">{truck.name}{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "Open" : "Closed"}</span></div>
+          <div className="truck-card-name"><Highlight text={truck.name} query={searchQuery} />{truck.isVerified && <span className="verified-badge" title="Verified"> ✅</span>} <span className={truck.open ? "open-tag" : "closed-tag"} role="status" aria-label={truck.open ? "Currently open" : "Currently closed"}>{truck.open ? "Open" : "Closed"}</span></div>
           <div className="truck-card-sub">
-            {truck.street ? `${truck.foodType} on ${truck.street}` : truck.foodType}
+            {truck.street ? <><Highlight text={truck.foodType} query={searchQuery} /> on <Highlight text={truck.street} query={searchQuery} /></> : <Highlight text={truck.foodType} query={searchQuery} />}
             &nbsp;·&nbsp; {truck.distance.toFixed(1)} mi
           </div>
           <div className="truck-card-hours">
@@ -506,7 +513,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
           )}
         </div>
       ) : (
-        displayed.map(truck => {
+        displayed.map((truck, i) => {
           const isEditing = editingId === truck.id;
 
           if (isEditing) return (
@@ -532,6 +539,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
             <TruckCard
               key={truck.id}
               truck={truck}
+              index={i}
               up={userVotes[truck.id] === 1}
               down={userVotes[truck.id] === -1}
               isMine={myTruckIds.includes(truck.id)}
@@ -539,6 +547,7 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
               commentsOpen={openCommentsId === truck.id}
               voteOpen={openVoteId === truck.id}
               commentCount={commentCounts[truck.id]}
+              searchQuery={searchText.trim()}
               onFocusTruck={onFocusTruck}
               onToggleFavorite={onToggleFavorite}
               onToggleVote={toggleVote}

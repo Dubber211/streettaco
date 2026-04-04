@@ -65,6 +65,8 @@ function App() {
   const [focusRequest, setFocusRequest] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [adminView, setAdminView] = useState(false);
@@ -124,6 +126,19 @@ function App() {
         setShowAdminLogin(true);
       }
 
+      // Auto-center on user's location (South Bend is just the fallback)
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            const loc = [pos.coords.latitude, pos.coords.longitude];
+            setUserLocation(loc);
+            setMapCenter(loc);
+          },
+          () => {}, // permission denied or error — stay on default
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+        );
+      }
+
       setLoading(false);
       } catch {
         setLoadError(true);
@@ -138,6 +153,17 @@ function App() {
     const goOffline = () => setIsOffline(true);
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
+
+    // PWA install prompt
+    const handleInstallPrompt = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      // Only show if user hasn't dismissed before
+      if (!localStorage.getItem("street-taco-install-dismissed")) {
+        setTimeout(() => setShowInstallBanner(true), 3000);
+      }
+    };
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
 
     const channel = supabase.channel("trucks-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "trucks" }, payload => {
@@ -194,6 +220,7 @@ function App() {
       navigator.serviceWorker?.removeEventListener("message", handleSWMessage);
       window.removeEventListener("online", goOnline);
       window.removeEventListener("offline", goOffline);
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
     };
   }, []);
 
@@ -709,6 +736,20 @@ function App() {
 
       <ToastContainer toasts={toasts} />
       {isOffline && <div className="offline-banner">You're offline — data may be stale</div>}
+      {showInstallBanner && (
+        <div className="install-banner">
+          <img src="/favicon.png" alt="" className="install-banner-icon" />
+          <span>Add StreetTaco to your home screen</span>
+          <button className="install-banner-btn" onClick={async () => {
+            if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; }
+            setShowInstallBanner(false);
+          }}>Install</button>
+          <button className="install-banner-dismiss" onClick={() => {
+            setShowInstallBanner(false);
+            localStorage.setItem("street-taco-install-dismissed", "1");
+          }} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       {adminView ? (
         <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>Loading admin…</div>}><AdminPanel
           trucks={trucks.map(normalizeTruck)}
