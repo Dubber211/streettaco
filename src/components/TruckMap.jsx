@@ -3,7 +3,7 @@ import { MapContainer, Marker, Popup, TileLayer, Circle, useMap, useMapEvents } 
 import L from "leaflet";
 import { RADIUS_OPTIONS, TILE_DARK, TILE_DARK_LABELS, TILE_LIGHT } from "../constants";
 import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, getTodayHoursContext, timeAgo, logEvent } from "../utils";
-import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOnDrag, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
+import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOffScreen, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
 import { PopupTopComment } from "./TruckList";
 
 function UserPanDetector({ onPan }) {
@@ -66,7 +66,7 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
         )}
         <FitBoundsToRadius center={mapCenter} radiusMiles={radiusMiles} skipRef={skipFitRef} />
         <UserPanDetector onPan={() => setUserPanned(true)} />
-        <ClosePopupOnDrag />
+        <ClosePopupOffScreen />
         <MapBoundsTracker onBoundsChange={onBoundsChange} />
         <MapZoomRadiusSync radiusMiles={radiusMiles} onRadiusChange={onRadiusChange} skipRef={skipFitRef} />
         <FocusTruck trucks={trucks} focusRequest={focusRequest} markerRefs={markerRefs} />

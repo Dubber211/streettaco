@@ -44,12 +44,18 @@ export function MapZoomRadiusSync({ radiusMiles, onRadiusChange, skipRef }) {
   return null;
 }
 
-export function ClosePopupOnDrag() {
+
+
+export function ClosePopupOffScreen() {
   const map = useMap();
   useEffect(() => {
-    const close = () => map.closePopup();
-    map.on("dragstart zoomstart", close);
-    return () => map.off("dragstart zoomstart", close);
+    const check = () => {
+      const popup = map._popup;
+      if (!popup || !popup.getLatLng()) return;
+      if (!map.getBounds().contains(popup.getLatLng())) map.closePopup();
+    };
+    map.on("moveend zoomend", check);
+    return () => map.off("moveend zoomend", check);
   }, [map]);
   return null;
 }
