@@ -12,7 +12,7 @@ import {
 import {
   nowIso, containsProfanity, loadBlockedWords, isOpenBySchedule,
   reverseGeocode, nominatimFetch, toAppTruck, haversineMiles, hoursSince,
-  isTruckExpired, normalizeTruck, logEvent, cleanupLocalStorage, fetchRoute,
+  isTruckExpired, normalizeTruck, logEvent, cleanupLocalStorage,
 } from "./utils";
 
 import { useLocalStorageState } from "./hooks";
@@ -82,93 +82,6 @@ function App() {
   const [newTruckPermanent, setNewTruckPermanent] = useState(false);
   const [newTruckHours, setNewTruckHours] = useState("");
   const [savingTruck, setSavingTruck] = useState(false);
-
-  // ── Navigation mode ──
-  const [navTarget, setNavTarget] = useState(null); // truck object being navigated to
-  const [navRoute, setNavRoute] = useState(null);   // { geometry, distance, duration }
-  const [navLoading, setNavLoading] = useState(false);
-  const [navUserPos, setNavUserPos] = useState(null); // live GPS during nav
-  const navWatchRef = useRef(null);
-  const ARRIVAL_RADIUS_MILES = 0.1;
-
-  const navDistanceRemaining = useMemo(() => {
-    if (!navTarget || !navUserPos) return null;
-    return haversineMiles(navUserPos, navTarget.position);
-  }, [navTarget, navUserPos]);
-
-  const navArrived = navDistanceRemaining !== null && navDistanceRemaining <= ARRIVAL_RADIUS_MILES;
-
-  async function handleStartNav(truckId) {
-    const truck = activeTrucks.find(t => t.id === truckId) || trucks.find(t => t.id === truckId);
-    if (!truck) { showToast("Truck not found."); return; }
-
-    // Need user location
-    const loc = userLocation || navUserPos;
-    if (!loc) {
-      showToast("Getting your location...");
-      if (!navigator.geolocation) { showToast("Geolocation not supported."); return; }
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const newLoc = [pos.coords.latitude, pos.coords.longitude];
-          setUserLocation(newLoc);
-          startNavWithLocation(truck, newLoc);
-        },
-        () => showToast("Couldn't get your location."),
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-      return;
-    }
-    startNavWithLocation(truck, loc);
-  }
-
-  async function startNavWithLocation(truck, loc) {
-    setNavLoading(true);
-    setNavTarget(truck);
-    const route = await fetchRoute(loc, truck.position);
-    setNavLoading(false);
-    if (!route) {
-      showToast("Couldn't find a route. Try opening in Maps instead.");
-      setNavTarget(null);
-      return;
-    }
-    setNavRoute(route);
-    setNavUserPos(loc);
-    logEvent("nav_start", { truckId: truck.id });
-
-    // Start watching GPS
-    if (navigator.geolocation) {
-      navWatchRef.current = navigator.geolocation.watchPosition(
-        pos => setNavUserPos([pos.coords.latitude, pos.coords.longitude]),
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 5000 }
-      );
-    }
-  }
-
-  function handleStopNav() {
-    if (navWatchRef.current != null) {
-      navigator.geolocation.clearWatch(navWatchRef.current);
-      navWatchRef.current = null;
-    }
-    setNavTarget(null);
-    setNavRoute(null);
-    setNavUserPos(null);
-  }
-
-  function handleNavArrived() {
-    if (navTarget) {
-      handleConfirmStillHere(navTarget.id);
-      logEvent("nav_arrived", { truckId: navTarget.id });
-    }
-    handleStopNav();
-  }
-
-  // Clean up GPS watch on unmount
-  useEffect(() => {
-    return () => {
-      if (navWatchRef.current != null) navigator.geolocation.clearWatch(navWatchRef.current);
-    };
-  }, []);
 
   const myTruckIds = useMemo(() =>
     trucks.filter(t => t.userId === userId).map(t => t.id),
@@ -859,28 +772,23 @@ function App() {
       ) : (
         <div className="map-app">
           {/* Map is the full-viewport background */}
-          <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} visibleTrucks={visibleTrucks} onFindNearest={handleFindNearest} onNavigate={handleStartNav} navTarget={navTarget} navRoute={navRoute} navUserPos={navUserPos} navLoading={navLoading} navDistanceRemaining={navDistanceRemaining} navArrived={navArrived} onStopNav={handleStopNav} onNavArrived={handleNavArrived} />
+          <TruckMap mapCenter={mapCenter} trucks={activeTrucks} radiusMiles={radiusMiles} onRadiusChange={setRadiusMiles} addMode={addMode} pendingPin={pendingPin} onPickLocation={handlePickLocation} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} userVotes={userVotes} userLocation={userLocation} focusRequest={focusRequest} onBoundsChange={setMapBounds} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} theme={theme} visibleTrucks={visibleTrucks} onFindNearest={handleFindNearest} />
 
-          {/* Floating header — hide during navigation */}
-          {!navTarget && <Header theme={theme} onToggleTheme={toggleTheme} onOpenSettings={() => setShowSettings(true)} />}
+          <Header theme={theme} onToggleTheme={toggleTheme} onOpenSettings={() => setShowSettings(true)} />
 
-          {/* Floating controls — hide during navigation */}
-          {!navTarget && <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />}
+          <ControlsBar searchText={searchText} setSearchText={setSearchText} radiusMiles={radiusMiles} setRadiusMiles={setRadiusMiles} onUseMyLocation={handleUseMyLocation} onLocationSearch={handleLocationSearch} locationLoading={locationLoading} />
 
-          {/* Floating Add Truck button — hide during navigation */}
-          {!addMode && !navTarget && (
+          {!addMode && (
             <button className="fab-add-truck" onClick={handleStartAddTruck} disabled={!canAdd} aria-label="Add truck">
               <span className="fab-plus">+</span>
             </button>
           )}
 
-          {/* Bottom sheet panels — hide during navigation */}
-          {!navTarget && <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} onUseMyLocation={handleUseLocationForPin} savingTruck={savingTruck} />}
+          <AddTruckPanel addMode={addMode} pendingPin={pendingPin} newTruckName={newTruckName} setNewTruckName={setNewTruckName} newTruckFood={newTruckFood} setNewTruckFood={setNewTruckFood} newTruckOpen={newTruckOpen} setNewTruckOpen={setNewTruckOpen} newTruckPermanent={newTruckPermanent} setNewTruckPermanent={setNewTruckPermanent} newTruckHours={newTruckHours} setNewTruckHours={setNewTruckHours} onSaveTruck={handleSaveTruck} onCancelAddTruck={handleCancelAddTruck} canAdd={canAdd} addsRemaining={addsRemaining} onUseMyLocation={handleUseLocationForPin} savingTruck={savingTruck} />
 
-          {!navTarget && <ProximityPrompt userLocation={userLocation} trucks={activeTrucks} onConfirm={handleConfirmStillHere} />}
+          <ProximityPrompt userLocation={userLocation} trucks={activeTrucks} onConfirm={handleConfirmStillHere} />
 
-          {/* Truck list bottom sheet — hide during navigation */}
-          {!navTarget && <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} onNavigate={handleStartNav} />}
+          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} />
         </div>
       )}
     </>

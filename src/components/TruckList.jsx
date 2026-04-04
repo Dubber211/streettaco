@@ -306,7 +306,7 @@ function Highlight({ text, query }) {
   return <>{text.slice(0, idx)}<mark className="search-highlight">{text.slice(idx, idx + query.length)}</mark>{text.slice(idx + query.length)}</>;
 }
 
-const TruckCard = memo(function TruckCard({ truck, index, up, down, isMine, isFav, commentsOpen, voteOpen, commentCount, searchQuery, onFocusTruck, onToggleFavorite, onToggleVote, onVote, onStartEdit, onDeleteTruck, onToggleComments, onShareTruck, onClosePopups, onNavigate, userId, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
+const TruckCard = memo(function TruckCard({ truck, index, up, down, isMine, isFav, commentsOpen, voteOpen, commentCount, searchQuery, onFocusTruck, onToggleFavorite, onToggleVote, onVote, onStartEdit, onDeleteTruck, onToggleComments, onShareTruck, onClosePopups, userId, isAdmin, onAdminHideComment, onAdminDeleteComment }) {
   return (
     <div>
       <div className={`truck-card${truck.open ? " truck-open" : ""}`} onClick={() => onFocusTruck(truck.id)} style={{ cursor: "pointer", animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -346,7 +346,7 @@ const TruckCard = memo(function TruckCard({ truck, index, up, down, isMine, isFa
           {isMine && <button className="icon-btn icon-btn-del" onClick={e => { e.stopPropagation(); onClosePopups(); onDeleteTruck(truck.id); }} title="Delete" aria-label="Delete truck">🗑</button>}
           <button className={`icon-btn icon-btn-comment ${commentsOpen ? "active" : ""}`} onClick={e => { e.stopPropagation(); onClosePopups(); onToggleComments(truck.id); }} title="Comments" aria-label="Comments">💬{commentCount ? <span className="comment-count-badge">{commentCount}</span> : null}</button>
           <button className="icon-btn icon-btn-share" onClick={e => { e.stopPropagation(); onClosePopups(); onShareTruck(truck.id); }} title="Share" aria-label="Share">🔗</button>
-          <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); logEvent("navigate_click", { truckId: truck.id }); onNavigate(truck.id); }} title="Navigate" aria-label="Navigate">🧭</button>
+          <button className="icon-btn icon-btn-nav" onClick={e => { e.stopPropagation(); logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} title="Navigate" aria-label="Navigate">🧭</button>
         </div>
       </div>
       {commentsOpen && <TruckComments truckId={truck.id} userId={userId} isAdmin={isAdmin} onAdminHideComment={onAdminHideComment} onAdminDeleteComment={onAdminDeleteComment} />}
@@ -354,7 +354,7 @@ const TruckCard = memo(function TruckCard({ truck, index, up, down, isMine, isFa
   );
 });
 
-export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment, onFindNearest, onStartAddTruck, canAdd, onNavigate }) {
+export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere, onReportClosed, myTruckIds, onDeleteTruck, onEditTruck, onFocusTruck, userId, onShareTruck, favorites, onToggleFavorite, isAdmin, onAdminHideComment, onAdminDeleteComment, onFindNearest, onStartAddTruck, canAdd }) {
   const [showOpenOnly, setShowOpenOnly] = useState(true);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [foodFilter, setFoodFilter] = useState("");
@@ -558,7 +558,6 @@ export function TruckList({ visibleTrucks, userVotes, onVote, onConfirmStillHere
               onToggleComments={toggleComments}
               onShareTruck={onShareTruck}
               onClosePopups={closePopups}
-              onNavigate={onNavigate}
               userId={userId}
               isAdmin={isAdmin}
               onAdminHideComment={onAdminHideComment}

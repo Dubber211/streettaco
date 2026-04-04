@@ -151,20 +151,6 @@ export function getTodayHoursContext(hours) {
   return "Closed today";
 }
 
-// ── Route fetching (OSRM public API) ──
-export async function fetchRoute(fromLatLng, toLatLng) {
-  const url = `https://router.project-osrm.org/route/v1/driving/${fromLatLng[1]},${fromLatLng[0]};${toLatLng[1]},${toLatLng[0]}?overview=full&geometries=geojson&steps=true`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data.routes || !data.routes.length) return null;
-  const route = data.routes[0];
-  return {
-    geometry: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
-    distance: route.distance, // meters
-    duration: route.duration, // seconds
-  };
-}
 
 // Global rate limiter for Nominatim (max 1 request per second per their usage policy)
 let lastNominatimCall = 0;
