@@ -240,7 +240,7 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowOnboarding,
 
       setPushEnabled(true);
     } catch (err) {
-      console.error("Push subscribe failed:", err);
+      // Push subscribe failed
       alert("Could not enable notifications. Please try again.");
     }
     setPushLoading(false);
@@ -258,7 +258,7 @@ export function SettingsPanel({ theme, onToggleTheme, onClose, onShowOnboarding,
       }
       setPushEnabled(false);
     } catch (err) {
-      console.error("Push unsubscribe failed:", err);
+      // Push unsubscribe failed
     }
     setPushLoading(false);
   }

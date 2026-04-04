@@ -81,14 +81,7 @@ Deno.serve(async (req: Request) => {
       return sub.lat == null;
     });
 
-    // For proximity notifications, include Supabase URL and anon key
-    // so the service worker can call back to confirm the truck
-    const extraData = type === "proximity" ? {
-      type: "proximity",
-      truck_id,
-      supabase_url: Deno.env.get("SUPABASE_URL"),
-      anon_key: Deno.env.get("SUPABASE_ANON_KEY"),
-    } : {};
+    const extraData = type === "proximity" ? { type: "proximity", truck_id } : {};
 
     const message = {
       data: JSON.stringify({ title, body, url: url || "/", ...extraData }),

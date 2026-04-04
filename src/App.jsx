@@ -96,13 +96,13 @@ function App() {
       let uid = session?.user?.id;
       if (!uid) {
         const { data, error: authErr } = await supabase.auth.signInAnonymously();
-        if (authErr) console.error("Anonymous auth failed:", authErr.message);
+        if (authErr) { /* auth failed silently — will retry on next load */ }
         uid = data?.user?.id;
       }
       setUserId(uid);
 
       const { data: truckRows, error: truckErr } = await supabase.from("trucks").select("*");
-      if (truckErr) console.error("Failed to load trucks:", truckErr.message);
+      if (truckErr) { /* truck load failed — user sees empty state */ }
       else if (truckRows) setTrucks(truckRows.map(toAppTruck));
 
       if (uid) {
@@ -158,7 +158,26 @@ function App() {
       });
     }, 30000);
 
-    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+    // Listen for service worker messages (e.g. proximity confirm from notification)
+    function handleSWMessage(event) {
+      if (event.data?.type === "confirm_truck" && event.data.truck_id) {
+        supabase.rpc("confirm_truck", { truck_id_input: event.data.truck_id });
+      }
+    }
+    navigator.serviceWorker?.addEventListener("message", handleSWMessage);
+
+    // Handle ?confirm=<truck_id> from SW opening the app
+    const confirmParam = new URLSearchParams(window.location.search).get("confirm");
+    if (confirmParam) {
+      supabase.rpc("confirm_truck", { truck_id_input: Number(confirmParam) || confirmParam });
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    }
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+      navigator.serviceWorker?.removeEventListener("message", handleSWMessage);
+    };
   }, []);
 
   function applyUserLocation(lat, lng, msg = "Centered on your location.") {
@@ -388,7 +407,7 @@ function App() {
     if (trucks.some(t => t.name.toLowerCase() === name.toLowerCase())) { showToast(`"${name}" already exists!`); return; }
     if (!userId) { showToast("Still connecting — try again in a moment."); return; }
     setSavingTruck(true);
-    const id = Date.now() + Math.floor(Math.random() * 1000);
+    const id = crypto.randomUUID();
     const ts = nowIso();
     const geo = await reverseGeocode(pendingPin[0], pendingPin[1]);
     const { error } = await supabase.from("trucks").insert({
@@ -400,7 +419,7 @@ function App() {
       ...(geo.city ? { city: geo.city } : {}),
       ...(geo.state ? { state: geo.state } : {}),
     });
-    if (error) { console.error("Save truck error:", error); showToast("Couldn't save truck — try again."); setSavingTruck(false); return; }
+    if (error) { showToast("Couldn't save truck — try again."); setSavingTruck(false); return; }
     setUserVotes(cv => ({ ...cv, [id]: 1 }));
     setAddHistory(cur => [...cur.filter(t => hoursSince(t) < 24), ts]);
     setMapCenter(pendingPin);
@@ -512,7 +531,7 @@ function App() {
   }
 
   async function handleAdminAddTruck({ name, food, open, isPermanent, hours, lat, lng }) {
-    const id = Date.now() + Math.floor(Math.random() * 1000);
+    const id = crypto.randomUUID();
     const ts = nowIso();
     const geo = await reverseGeocode(lat, lng);
     const { error } = await supabase.from("trucks").insert({

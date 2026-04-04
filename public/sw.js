@@ -12,7 +12,12 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    ).then(() => {
+      // Notify all open tabs that a new version is active
+      self.clients.matchAll({ type: "window" }).then((windowClients) => {
+        windowClients.forEach((client) => client.postMessage({ type: "sw_updated" }));
+      });
+    })
   );
   self.clients.claim();
 });
@@ -28,7 +33,7 @@ self.addEventListener("push", (e) => {
     body: data.body || "Something new is happening nearby!",
     icon: "/icon-192.png",
     badge: "/favicon.png",
-    data: { url: data.url || "/", type: data.type, truck_id: data.truck_id, supabase_url: data.supabase_url, anon_key: data.anon_key },
+    data: { url: data.url || "/", type: data.type, truck_id: data.truck_id },
   };
 
   // Proximity notifications get action buttons
@@ -48,26 +53,23 @@ self.addEventListener("notificationclick", (e) => {
   const data = e.notification.data || {};
   e.notification.close();
 
-  // Handle proximity action buttons
-  if (data.type === "proximity" && data.truck_id && data.supabase_url && data.anon_key) {
+  // Handle proximity action buttons by messaging an open client window.
+  // The app holds the Supabase session, so it can call the RPC securely.
+  if (data.type === "proximity" && data.truck_id) {
     if (e.action === "still_here") {
-      // Confirm the truck via RPC (bumps votes + resets last_confirmed_at)
       e.waitUntil(
-        fetch(`${data.supabase_url}/rest/v1/rpc/confirm_truck`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": data.anon_key,
-            "Authorization": "Bearer " + data.anon_key,
-          },
-          body: JSON.stringify({ truck_id_input: data.truck_id }),
+        clients.matchAll({ type: "window" }).then((windowClients) => {
+          for (const client of windowClients) {
+            client.postMessage({ type: "confirm_truck", truck_id: data.truck_id });
+            return; // only need to message one client
+          }
+          // No open window — open the app with a confirm param
+          return clients.openWindow(`/?confirm=${data.truck_id}`);
         })
-        .catch((err) => console.error("Confirm truck failed:", err))
       );
       return;
     }
     if (e.action === "not_here") {
-      // User says truck isn't there — no action needed, just dismiss
       return;
     }
   }

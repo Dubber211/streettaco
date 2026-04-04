@@ -2,6 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://vdehbjiulyrjgriympkh.supabase.co" />
+    <link rel="preconnect" href="https://nominatim.openstreetmap.org" />
+    <link rel="dns-prefetch" href="https://a.basemaps.cartocdn.com" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.json" />
@@ -14,6 +17,9 @@
     <meta property="og:description" content="Find food trucks near you — community powered" />
     <meta property="og:image" content="/og-banner.png" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.streettaco.food" />
+    <meta property="og:site_name" content="StreetTaco" />
+    <link rel="canonical" href="https://www.streettaco.food" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="StreetTaco" />
     <meta name="twitter:description" content="Find food trucks near you — community powered" />
@@ -32,6 +38,13 @@
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js");
+          navigator.serviceWorker.addEventListener("message", (e) => {
+            if (e.data?.type === "sw_updated") {
+              if (confirm("A new version of StreetTaco is available. Reload now?")) {
+                window.location.reload();
+              }
+            }
+          });
         });
       }
     </script>

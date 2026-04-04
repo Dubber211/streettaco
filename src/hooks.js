@@ -15,7 +15,7 @@ export function useLocalStorageState(key, fallback) {
       return;
     }
     try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-  }, [key, value, fallback]);
+  }, [key, value]); // eslint-disable-line react-hooks/exhaustive-deps
   return [value, setValue];
 }
 
