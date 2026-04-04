@@ -12,7 +12,7 @@ import {
 import {
   nowIso, containsProfanity, loadBlockedWords, isOpenBySchedule,
   reverseGeocode, nominatimFetch, toAppTruck, haversineMiles, hoursSince,
-  isTruckExpired, normalizeTruck, logEvent,
+  isTruckExpired, normalizeTruck, logEvent, cleanupLocalStorage,
 } from "./utils";
 
 import { useLocalStorageState } from "./hooks";
@@ -63,6 +63,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [focusRequest, setFocusRequest] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [adminView, setAdminView] = useState(false);
@@ -92,6 +93,7 @@ function App() {
   // Auth + initial data load + realtime
   useEffect(() => {
     logEvent("app_open");
+    cleanupLocalStorage([STORAGE_KEYS.confirmHistory, STORAGE_KEYS.reportHistory, STORAGE_KEYS.addHistory]);
     async function init() {
       loadBlockedWords();
       const { data: { session } } = await supabase.auth.getSession();
@@ -125,6 +127,11 @@ function App() {
     init();
 
     const realtimeConnected = { current: false };
+
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
 
     const channel = supabase.channel("trucks-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "trucks" }, payload => {
@@ -179,6 +186,8 @@ function App() {
       supabase.removeChannel(channel);
       clearInterval(poll);
       navigator.serviceWorker?.removeEventListener("message", handleSWMessage);
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
     };
   }, []);
 
@@ -357,11 +366,15 @@ function App() {
   }
 
   function handleShareTruck(id) {
-    const url = `${window.location.origin}${window.location.pathname}?truck=${id}`;
-    navigator.clipboard.writeText(url).then(
-      () => showToast("Link copied! 🔗"),
-      () => showToast("Couldn't copy — share this: " + url)
-    );
+    const url = `https://www.streettaco.food?truck=${id}`;
+    if (navigator.share) {
+      navigator.share({ title: "StreetTaco", url }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(url).then(
+        () => showToast("Link copied! 🔗"),
+        () => showToast("Couldn't copy — share this: " + url)
+      );
+    }
   }
 
   async function handleReportClosed(id) {
@@ -675,6 +688,7 @@ function App() {
       )}
 
       <ToastContainer toasts={toasts} />
+      {isOffline && <div className="offline-banner">You're offline — data may be stale</div>}
       {adminView ? (
         <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>Loading admin…</div>}><AdminPanel
           trucks={trucks.map(normalizeTruck)}

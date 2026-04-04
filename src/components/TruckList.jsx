@@ -119,17 +119,21 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [sortBy, setSortBy] = useState("top");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const votingRef = useRef(new Set());
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      supabase.from("comments").select("id, body, created_at, user_id, votes").eq("truck_id", truckId).limit(50),
+      supabase.from("comments").select("id, body, created_at, user_id, votes").eq("truck_id", truckId).order("created_at", { ascending: false }).range(0, PAGE_SIZE),
       userId ? supabase.from("comment_votes").select("comment_id, vote").eq("user_id", userId) : { data: [] },
     ]).then(([commentsRes, votesRes]) => {
       if (cancelled) return;
       if (commentsRes.error) { setLoadState("error"); return; }
       setComments(commentsRes.data);
+      setHasMore(commentsRes.data.length > PAGE_SIZE);
       const voteMap = {};
       (votesRes.data || []).forEach(v => { voteMap[v.comment_id] = v.vote; });
       setCommentVotes(voteMap);
@@ -137,6 +141,20 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
     });
     return () => { cancelled = true; };
   }, [truckId, userId]);
+
+  async function loadMoreComments() {
+    setLoadingMore(true);
+    const { data } = await supabase.from("comments")
+      .select("id, body, created_at, user_id, votes")
+      .eq("truck_id", truckId)
+      .order("created_at", { ascending: false })
+      .range(comments.length, comments.length + PAGE_SIZE);
+    if (data) {
+      setComments(cur => [...cur, ...data.filter(d => !cur.find(c => c.id === d.id))]);
+      setHasMore(data.length > PAGE_SIZE);
+    }
+    setLoadingMore(false);
+  }
 
   // Realtime: update comments when others post, edit, or delete
   useEffect(() => {
@@ -249,6 +267,11 @@ export function TruckComments({ truckId, userId, isAdmin, onAdminHideComment, on
               </div>
             )
           }
+          {hasMore && (
+            <button className="btn-load-more" onClick={loadMoreComments} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more comments"}
+            </button>
+          )}
           {userAlreadyCommented
             ? <div className="comments-empty">You've already commented on this truck.</div>
             : (

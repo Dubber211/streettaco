@@ -4,6 +4,27 @@ import { DAY_LABELS, FOOD_EMOJIS, MOBILE_TRUCK_EXPIRATION_HOURS } from "./consta
 
 export const nowIso = () => new Date().toISOString();
 
+// Clean up stale localStorage history entries (confirm/report timestamps older than 72 hours)
+export function cleanupLocalStorage(keys) {
+  const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+  keys.forEach(key => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (typeof data === "object" && !Array.isArray(data)) {
+        const cleaned = {};
+        for (const [id, ts] of Object.entries(data)) {
+          if (new Date(ts).getTime() > cutoff) cleaned[id] = ts;
+        }
+        localStorage.setItem(key, JSON.stringify(cleaned));
+      } else if (Array.isArray(data)) {
+        localStorage.setItem(key, JSON.stringify(data.filter(ts => new Date(ts).getTime() > cutoff)));
+      }
+    } catch {}
+  });
+}
+
 // Lightweight analytics — fire-and-forget insert to analytics_events
 export function logEvent(event, { truckId = null, metadata = {} } = {}) {
   let uid = localStorage.getItem("street-taco-user-id");
