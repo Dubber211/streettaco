@@ -15,22 +15,53 @@ function UserPanDetector({ onPan }) {
 function FollowNavUser({ userPos, truckPos }) {
   const map = useMap();
   const fittedRef = useRef(false);
+  const [following, setFollowing] = useState(true);
+  const programmaticMoveRef = useRef(false);
+
+  // Detect user drag/zoom to pause follow mode
+  useMapEvents({
+    dragstart: () => { if (!programmaticMoveRef.current) setFollowing(false); },
+    zoomstart: () => { if (!programmaticMoveRef.current) setFollowing(false); },
+  });
 
   // Fit bounds to show both user and truck on first render
   useEffect(() => {
     if (!userPos || !truckPos || fittedRef.current) return;
     fittedRef.current = true;
+    programmaticMoveRef.current = true;
     const bounds = L.latLngBounds([userPos, truckPos]);
     map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+    setTimeout(() => { programmaticMoveRef.current = false; }, 600);
   }, [userPos, truckPos, map]);
 
-  // Pan to follow user as they move (after initial fit)
+  // Pan to follow user as they move (only when following)
   useEffect(() => {
-    if (!userPos || !fittedRef.current) return;
+    if (!userPos || !fittedRef.current || !following) return;
+    programmaticMoveRef.current = true;
     map.panTo(userPos, { animate: true, duration: 0.5 });
-  }, [userPos, map]);
+    setTimeout(() => { programmaticMoveRef.current = false; }, 600);
+  }, [userPos, map, following]);
 
-  return null;
+  function handleRecenter() {
+    if (!userPos) return;
+    setFollowing(true);
+    programmaticMoveRef.current = true;
+    map.panTo(userPos, { animate: true, duration: 0.3 });
+    setTimeout(() => { programmaticMoveRef.current = false; }, 400);
+  }
+
+  if (following) return null;
+
+  return (
+    <div className="nav-recenter-wrap">
+      <button className="nav-recenter-btn" onClick={handleRecenter} aria-label="Re-center on your location">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 function formatNavDuration(seconds) {
