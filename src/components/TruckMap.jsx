@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Popup, TileLayer, Circle, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, Circle, Polyline, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
 import { RADIUS_OPTIONS, TILE_DARK, TILE_DARK_LABELS, TILE_LIGHT } from "../constants";
 import { getFoodEmoji, makeTruckIcon, makePendingIcon, userLocationIcon, haversineMiles, milesToMeters, formatSchedule, getTodayHoursContext, timeAgo, logEvent } from "../utils";
 import { FitBoundsToRadius, MapZoomRadiusSync, ClosePopupOnDrag, MapBoundsTracker, FocusTruck, MapClickHandler } from "./MapHelpers";
@@ -10,7 +11,91 @@ function UserPanDetector({ onPan }) {
   return null;
 }
 
-export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme, visibleTrucks, onFindNearest }) {
+/* ─── Navigation Mode: follow user position on map ─────────────────────────── */
+function FollowNavUser({ userPos, truckPos }) {
+  const map = useMap();
+  const fittedRef = useRef(false);
+
+  // Fit bounds to show both user and truck on first render
+  useEffect(() => {
+    if (!userPos || !truckPos || fittedRef.current) return;
+    fittedRef.current = true;
+    const bounds = L.latLngBounds([userPos, truckPos]);
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+  }, [userPos, truckPos, map]);
+
+  // Pan to follow user as they move (after initial fit)
+  useEffect(() => {
+    if (!userPos || !fittedRef.current) return;
+    map.panTo(userPos, { animate: true, duration: 0.5 });
+  }, [userPos, map]);
+
+  return null;
+}
+
+function formatNavDuration(seconds) {
+  if (seconds < 60) return "< 1 min";
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem ? `${hrs} hr ${rem} min` : `${hrs} hr`;
+}
+
+function formatNavDistance(miles) {
+  if (miles < 0.1) return `${Math.round(miles * 5280)} ft`;
+  return `${miles.toFixed(1)} mi`;
+}
+
+/* ─── Navigation Bar ───────────────────────────────────────────────────────── */
+function NavBar({ navTarget, navRoute, navDistanceRemaining, navArrived, navLoading, onStopNav, onNavArrived }) {
+  const emoji = getFoodEmoji(navTarget.foodType);
+  const etaSeconds = navRoute?.duration;
+  const routeMiles = navRoute ? navRoute.distance / 1609.34 : null;
+
+  return (
+    <div className="nav-bar">
+      <div className="nav-bar-top">
+        <button className="nav-bar-close" onClick={onStopNav} aria-label="Stop navigation">✕</button>
+        <div className="nav-bar-info">
+          <div className="nav-bar-truck">
+            <span className="nav-bar-emoji">{emoji}</span>
+            <span className="nav-bar-name">{navTarget.name}</span>
+          </div>
+          {navLoading ? (
+            <div className="nav-bar-meta">Finding route...</div>
+          ) : navRoute && (
+            <div className="nav-bar-stats">
+              <span className="nav-bar-stat">
+                <span className="nav-bar-stat-num">{formatNavDuration(etaSeconds)}</span>
+                <span className="nav-bar-stat-label">ETA</span>
+              </span>
+              <span className="nav-bar-stat-divider" />
+              <span className="nav-bar-stat">
+                <span className="nav-bar-stat-num">{formatNavDistance(navDistanceRemaining ?? routeMiles)}</span>
+                <span className="nav-bar-stat-label">away</span>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="nav-bar-actions">
+        {navArrived ? (
+          <button className="nav-bar-btn nav-bar-arrived" onClick={onNavArrived}>
+            I'm here! ✅
+          </button>
+        ) : (
+          <button className="nav-bar-btn nav-bar-maps" onClick={() => window.open(`https://maps.google.com/maps?daddr=${navTarget.position[0]},${navTarget.position[1]}`, "_blank")}>
+            Open in Maps 🗺️
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMode, pendingPin, onPickLocation, onVote, userVotes, userLocation, focusRequest, onBoundsChange, onStartAddTruck, canAdd, addsRemaining, theme, visibleTrucks, onFindNearest, onNavigate, navTarget, navRoute, navUserPos, navLoading, navDistanceRemaining, navArrived, onStopNav, onNavArrived }) {
   const pendingIcon = useMemo(() => makePendingIcon(), []);
   const markerRefs = useRef({});
   const skipFitRef = useRef(false);
@@ -80,7 +165,7 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
             </Popup>
           </Marker>
         )}
-        <Circle center={userLocation || mapCenter} radius={milesToMeters(radiusMiles)} pathOptions={{ color: "#06b6d4", fillColor: "#06b6d4", fillOpacity: 0.06, weight: 1.5, dashArray: "6 4" }} />
+        {!navTarget && <Circle center={userLocation || mapCenter} radius={milesToMeters(radiusMiles)} pathOptions={{ color: "#06b6d4", fillColor: "#06b6d4", fillOpacity: 0.06, weight: 1.5, dashArray: "6 4" }} />}
 
         {trucks.map(truck => {
           const dist = distanceMap.get(truck.id) ?? haversineMiles(userLocation || mapCenter, truck.position);
@@ -125,7 +210,7 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
                   })()}
 
                   <div className="popup-actions">
-                    <button className="popup-action-btn popup-nav" onClick={() => { logEvent("navigate_click", { truckId: truck.id }); window.open(`https://maps.google.com/maps?daddr=${truck.position[0]},${truck.position[1]}`, "_blank"); }} aria-label="Navigate">
+                    <button className="popup-action-btn popup-nav" onClick={() => { logEvent("navigate_click", { truckId: truck.id }); onNavigate(truck.id); }} aria-label="Navigate">
                       🧭 Go
                     </button>
                   </div>
@@ -146,7 +231,27 @@ export function TruckMap({ mapCenter, trucks, radiusMiles, onRadiusChange, addMo
             </Popup>
           </Marker>
         )}
+
+        {/* Navigation mode: route line + follow user */}
+        {navRoute && <Polyline positions={navRoute.geometry} pathOptions={{ color: "#06b6d4", weight: 5, opacity: 0.85, lineCap: "round", lineJoin: "round" }} />}
+        {navTarget && navUserPos && <FollowNavUser userPos={navUserPos} truckPos={navTarget.position} />}
+        {navUserPos && navTarget && (
+          <Marker position={navUserPos} icon={userLocationIcon} />
+        )}
       </MapContainer>
+
+      {/* Navigation bar overlay */}
+      {navTarget && (
+        <NavBar
+          navTarget={navTarget}
+          navRoute={navRoute}
+          navDistanceRemaining={navDistanceRemaining}
+          navArrived={navArrived}
+          navLoading={navLoading}
+          onStopNav={onStopNav}
+          onNavArrived={onNavArrived}
+        />
+      )}
     </div>
   );
 }
