@@ -200,10 +200,24 @@ function App() {
       });
     }, 30000);
 
+    // Cooldown-aware confirm: same 30-min window enforced by handleConfirmStillHere,
+    // applied to confirmations that come in through the SW or a deep link so users
+    // can't bypass the limit just by re-tapping a notification or reopening a URL.
+    function confirmWithCooldown(truckId) {
+      try {
+        const history = JSON.parse(localStorage.getItem(STORAGE_KEYS.confirmHistory) || "{}");
+        const last = history[truckId];
+        if (last && (Date.now() - new Date(last).getTime()) / 60000 < CONFIRM_COOLDOWN_MINUTES) return;
+        supabase.rpc("confirm_truck", { truck_id_input: truckId });
+        history[truckId] = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEYS.confirmHistory, JSON.stringify(history));
+      } catch { /* ignore */ }
+    }
+
     // Listen for service worker messages (e.g. proximity confirm from notification)
     function handleSWMessage(event) {
       if (event.data?.type === "confirm_truck" && event.data.truck_id) {
-        supabase.rpc("confirm_truck", { truck_id_input: event.data.truck_id });
+        confirmWithCooldown(event.data.truck_id);
       }
     }
     navigator.serviceWorker?.addEventListener("message", handleSWMessage);
@@ -211,7 +225,7 @@ function App() {
     // Handle ?confirm=<truck_id> from SW opening the app
     const confirmParam = new URLSearchParams(window.location.search).get("confirm");
     if (confirmParam) {
-      supabase.rpc("confirm_truck", { truck_id_input: Number(confirmParam) || confirmParam });
+      confirmWithCooldown(Number(confirmParam) || confirmParam);
       window.history.replaceState({}, "", window.location.pathname + window.location.hash);
     }
 

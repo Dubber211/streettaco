@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { PROXIMITY_KEY, PROXIMITY_RADIUS_MILES, ONBOARDING_STEPS, STORAGE_KEYS } from "../constants";
 import { haversineMiles } from "../utils";
-import { supabase } from "../supabase";
 import { useFocusTrap } from "../hooks";
 
 /* ─── Proximity Prompt ─────────────────────────────────────────────────────── */
@@ -9,25 +8,20 @@ export function getStoredDismissals() {
   try { return JSON.parse(localStorage.getItem(PROXIMITY_KEY) || "{}"); } catch { return {}; }
 }
 
-// Send a proximity push notification instead of showing the in-app modal
-async function sendProximityPush(truck) {
+// Show a proximity notification via the local service worker. We don't
+// route this through the server because the user is right here, the
+// permission is already granted, and the SW can fire a notification
+// directly — no need to involve the push backend.
+async function showProximityNotification(truck) {
   try {
-    let uid = localStorage.getItem("street-taco-user-id");
-    if (!uid) return;
-    const supabaseUrl = supabase.supabaseUrl;
-    await fetch(`${supabaseUrl}/functions/v1/push-notification`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "proximity",
-        title: "Truck nearby!",
-        body: `Are you near ${truck.name}? Confirm it's still here!`,
-        url: "/",
-        truck_id: truck.id,
-        target_user: uid,
-      }),
+    if (!("serviceWorker" in navigator) || Notification.permission !== "granted") return;
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification("Truck nearby!", {
+      body: `Are you near ${truck.name}? Confirm it's still here!`,
+      data: { url: "/", type: "proximity", truck_id: truck.id },
+      tag: `proximity-${truck.id}`,
     });
-  } catch (e) { /* Edge Function call failed — fall through to in-app */ }
+  } catch (e) { /* fall through to in-app prompt */ }
 }
 
 export function ProximityPrompt({ userLocation, trucks, onConfirm }) {
@@ -70,7 +64,7 @@ export function ProximityPrompt({ userLocation, trucks, onConfirm }) {
   useEffect(() => {
     if (!nearbyTruck) { setPrompt(null); return; }
     if (pushSubscribed) {
-      sendProximityPush(nearbyTruck);
+      showProximityNotification(nearbyTruck);
       markDone(nearbyTruck.id);
     } else {
       setPrompt(nearbyTruck);

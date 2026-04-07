@@ -23,6 +23,23 @@ Deno.serve(async (req: Request) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  // Require a shared secret. The only legitimate caller is our own
+  // Postgres triggers (via pg_net), which set this header. Anything
+  // else — including the browser — gets rejected.
+  const expectedSecret = Deno.env.get("PUSH_NOTIFICATION_SECRET");
+  if (!expectedSecret) {
+    return new Response(JSON.stringify({ error: "Server misconfigured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (req.headers.get("x-push-secret") !== expectedSecret) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const { title, body, url, type, truck_id, truck_lat, truck_lng, target_user } = await req.json();
     if (!title || !body) {

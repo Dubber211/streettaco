@@ -1,6 +1,9 @@
 .env
 .env.local
 
+# Supabase CLI scratch files
+supabase/.temp/
+
 # Logs
 logs
 *.log
