@@ -33,10 +33,10 @@ function urlBase64ToUint8Array(base64String) {
 
 // Get the user_id we use throughout the app (anonymous, stored in localStorage)
 function getUserId() {
-  let id = localStorage.getItem("street-taco-user-id");
+  let id = localStorage.getItem(STORAGE_KEYS.userId);
   if (!id) {
     id = crypto.randomUUID();
-    localStorage.setItem("street-taco-user-id", id);
+    localStorage.setItem(STORAGE_KEYS.userId, id);
   }
   return id;
 }
@@ -102,8 +102,8 @@ function FeedbackForm({ onClose }) {
     e.preventDefault();
     if (!body.trim() || sending) return;
     setSending(true);
-    let uid = localStorage.getItem("street-taco-user-id");
-    if (!uid) { uid = crypto.randomUUID(); localStorage.setItem("street-taco-user-id", uid); }
+    let uid = localStorage.getItem(STORAGE_KEYS.userId);
+    if (!uid) { uid = crypto.randomUUID(); localStorage.setItem(STORAGE_KEYS.userId, uid); }
     const { error } = await supabase.from("feedback").insert({ user_id: uid, body: body.trim() });
     setSending(false);
     if (error) alert("Couldn't send feedback — try again.");

@@ -18,6 +18,9 @@ export const STORAGE_KEYS = {
   eulaAccepted: "street-taco-eula-accepted-v2",
   notifyNewTrucks: "street-taco-notify-new",
   notifyFavorites: "street-taco-notify-favorites",
+  userId: "street-taco-user-id",
+  installDismissed: "street-taco-install-dismissed",
+  proximityPrompts: "street-taco-proximity-prompts",
 };
 
 export const MAX_NAME_LENGTH = 40;
@@ -25,7 +28,7 @@ export const MAX_FOOD_LENGTH = 30;
 export const CONFIRM_COOLDOWN_MINUTES = 30;
 export const REPORT_COOLDOWN_MINUTES = 30;
 export const ADD_COOLDOWN_MINUTES = 15;
-export const PROXIMITY_KEY = "street-taco-proximity-prompts";
+export const PROXIMITY_KEY = STORAGE_KEYS.proximityPrompts;
 export const PROXIMITY_RADIUS_MILES = 0.25;
 
 export const VAPID_PUBLIC_KEY = "BEivrz-goKCjHc7I271kS2xWt_CbEKT69FbP3dTNSuNTINu2x5Y-xkgZHUW_ba0DMZPG2b_1qnwzpXj9F4Hlxdw";

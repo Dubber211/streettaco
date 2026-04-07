@@ -160,7 +160,7 @@ function App() {
       e.preventDefault();
       setInstallPrompt(e);
       // Only show if user hasn't dismissed before
-      if (!localStorage.getItem("street-taco-install-dismissed")) {
+      if (!localStorage.getItem(STORAGE_KEYS.installDismissed)) {
         setTimeout(() => setShowInstallBanner(true), 3000);
       }
     };
@@ -273,8 +273,8 @@ function App() {
       });
 
       const sub = subscription.toJSON();
-      let uid = localStorage.getItem("street-taco-user-id");
-      if (!uid) { uid = crypto.randomUUID(); localStorage.setItem("street-taco-user-id", uid); }
+      let uid = localStorage.getItem(STORAGE_KEYS.userId);
+      if (!uid) { uid = crypto.randomUUID(); localStorage.setItem(STORAGE_KEYS.userId, uid); }
 
       await supabase.from("push_subscriptions").insert({
         user_id: uid,
@@ -762,7 +762,7 @@ function App() {
           }}>Install</button>
           <button className="install-banner-dismiss" onClick={() => {
             setShowInstallBanner(false);
-            localStorage.setItem("street-taco-install-dismissed", "1");
+            localStorage.setItem(STORAGE_KEYS.installDismissed, "1");
           }} aria-label="Dismiss">✕</button>
         </div>
       )}

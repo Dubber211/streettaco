@@ -1,6 +1,6 @@
 import L from "leaflet";
 import { supabase } from "./supabase";
-import { DAY_LABELS, FOOD_EMOJIS, MOBILE_TRUCK_EXPIRATION_HOURS } from "./constants";
+import { DAY_LABELS, FOOD_EMOJIS, MOBILE_TRUCK_EXPIRATION_HOURS, STORAGE_KEYS } from "./constants";
 
 export const nowIso = () => new Date().toISOString();
 
@@ -27,8 +27,8 @@ export function cleanupLocalStorage(keys) {
 
 // Lightweight analytics — fire-and-forget insert to analytics_events
 export function logEvent(event, { truckId = null, metadata = {} } = {}) {
-  let uid = localStorage.getItem("street-taco-user-id");
-  if (!uid) { uid = crypto.randomUUID(); localStorage.setItem("street-taco-user-id", uid); }
+  let uid = localStorage.getItem(STORAGE_KEYS.userId);
+  if (!uid) { uid = crypto.randomUUID(); localStorage.setItem(STORAGE_KEYS.userId, uid); }
   supabase.from("analytics_events").insert({
     user_id: uid,
     event,
@@ -152,13 +152,20 @@ export function getTodayHoursContext(hours) {
 }
 
 
-// Global rate limiter for Nominatim (max 1 request per second per their usage policy)
-let lastNominatimCall = 0;
+// Global rate limiter for Nominatim (max 1 request per second per their usage policy).
+// Persisted to sessionStorage so a quick reload can't bypass the cooldown.
+const NOMINATIM_LAST_CALL_KEY = "street-taco-nominatim-last-call";
+function readLastNominatimCall() {
+  try { return Number(sessionStorage.getItem(NOMINATIM_LAST_CALL_KEY)) || 0; } catch { return 0; }
+}
+function writeLastNominatimCall(ts) {
+  try { sessionStorage.setItem(NOMINATIM_LAST_CALL_KEY, String(ts)); } catch { /* ignore */ }
+}
 export async function nominatimFetch(url) {
   const now = Date.now();
-  const wait = Math.max(0, 1100 - (now - lastNominatimCall));
+  const wait = Math.max(0, 1100 - (now - readLastNominatimCall()));
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  lastNominatimCall = Date.now();
+  writeLastNominatimCall(Date.now());
   return fetch(url);
 }
 
