@@ -476,11 +476,10 @@ function App() {
     if (trucks.some(t => t.name.toLowerCase() === name.toLowerCase())) { showToast(`"${name}" already exists!`); return; }
     if (!userId) { showToast("Still connecting — try again in a moment."); return; }
     setSavingTruck(true);
-    const id = crypto.randomUUID();
     const ts = nowIso();
     const geo = await reverseGeocode(pendingPin[0], pendingPin[1]);
     const { error } = await supabase.from("trucks").insert({
-      id, name, food_type: food, open: isOpenBySchedule(hours) ?? true, votes: 1,
+      id: Date.now(), name, food_type: food, open: isOpenBySchedule(hours) ?? true, votes: 1,
       lat: pendingPin[0], lng: pendingPin[1],
       is_permanent: newTruckPermanent, hours: hours || "",
       user_id: userId, created_at: ts, last_confirmed_at: ts, is_approved: false,
@@ -600,11 +599,10 @@ function App() {
   }
 
   async function handleAdminAddTruck({ name, food, open, isPermanent, hours, lat, lng }) {
-    const id = crypto.randomUUID();
     const ts = nowIso();
     const geo = await reverseGeocode(lat, lng);
     const { error } = await supabase.from("trucks").insert({
-      id, name, food_type: food, open, votes: 1,
+      id: Date.now(), name, food_type: food, open, votes: 1,
       lat, lng, is_permanent: isPermanent, hours: isPermanent ? hours : "",
       user_id: userId, created_at: ts, last_confirmed_at: ts,
       ...(geo.street ? { street: geo.street } : {}),
