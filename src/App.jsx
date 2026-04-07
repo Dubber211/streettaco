@@ -478,8 +478,9 @@ function App() {
     setSavingTruck(true);
     const ts = nowIso();
     const geo = await reverseGeocode(pendingPin[0], pendingPin[1]);
+    const newTruckId = Date.now();
     const { error } = await supabase.from("trucks").insert({
-      id: Date.now(), name, food_type: food, open: isOpenBySchedule(hours) ?? true, votes: 1,
+      id: newTruckId, name, food_type: food, open: isOpenBySchedule(hours) ?? true, votes: 1,
       lat: pendingPin[0], lng: pendingPin[1],
       is_permanent: newTruckPermanent, hours: hours || "",
       user_id: userId, created_at: ts, last_confirmed_at: ts, is_approved: false,
@@ -488,7 +489,7 @@ function App() {
       ...(geo.state ? { state: geo.state } : {}),
     });
     if (error) { showToast("Couldn't save truck — try again."); setSavingTruck(false); return; }
-    setUserVotes(cv => ({ ...cv, [id]: 1 }));
+    setUserVotes(cv => ({ ...cv, [newTruckId]: 1 }));
     setAddHistory(cur => [...cur.filter(t => hoursSince(t) < 24), ts]);
     setMapCenter(pendingPin);
     setAddMode(false);
