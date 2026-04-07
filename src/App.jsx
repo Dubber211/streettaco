@@ -363,9 +363,9 @@ function App() {
       showToast("You already confirmed this truck recently. Try again later.");
       return;
     }
-    const { error } = await supabase.from("trucks")
-      .update({ last_confirmed_at: nowIso() })
-      .eq("id", id).eq("is_permanent", false);
+    // Route through the SECURITY DEFINER RPC instead of a direct .update() so the
+    // trucks_update RLS policy can stay locked to `using (false)` for anon clients.
+    const { error } = await supabase.rpc("confirm_truck", { truck_id_input: id });
     if (error) showToast("Couldn't confirm — try again.");
     else {
       setConfirmHistory(h => ({ ...h, [id]: nowIso() }));
