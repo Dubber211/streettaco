@@ -515,7 +515,31 @@
     margin-bottom: 16px;
     padding-top: 4px;
     color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
+
+  .add-panel-toggle-hint {
+    font-family: var(--font-body, inherit);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--cyan, #22d3ee);
+    opacity: 0.85;
+    letter-spacing: 0.02em;
+  }
+
+  .sheet-handle-btn {
+    background: none;
+    border: none;
+    padding: 10px 0 6px;
+    width: 100%;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+  }
+  .sheet-handle-btn:focus-visible { outline: 2px solid var(--cyan, #22d3ee); outline-offset: 2px; border-radius: 8px; }
 
   /* Waze-style step indicator */
   .add-steps {
@@ -843,10 +867,20 @@
     box-shadow: 0 0 0 1px rgba(6,182,212,0.3), 0 -4px 24px rgba(6,182,212,0.1);
     border-radius: 20px 20px 0 0;
     padding: 0 20px 24px;
-    max-height: 75vh;
+    max-height: 70vh;
     overflow-y: auto;
     animation: sheet-up 0.3s ease-out;
+    transition: max-height 0.25s ease, padding 0.25s ease;
   }
+
+  /* Collapsed: show just the handle + title so the map is fully accessible
+     for dropping a pin. Tap the handle/title to expand. */
+  .add-panel-sheet.collapsed {
+    max-height: 86px;
+    padding-bottom: 12px;
+    overflow: hidden;
+  }
+  .add-panel-sheet.collapsed .add-panel-title { margin-bottom: 0; }
 
   :root[data-theme="light"] .add-panel-sheet {
     background: rgba(255, 255, 255, 0.95);
@@ -1609,6 +1643,15 @@
       border-left: 1px solid rgba(6,182,212,0.3);
       max-height: 100vh;
     }
+    /* Desktop: the panel is a side drawer, not a bottom sheet — don't collapse it. */
+    .add-panel-sheet.collapsed {
+      max-height: 100vh;
+      padding-bottom: 24px;
+      overflow-y: auto;
+    }
+    .add-panel-sheet.collapsed .add-panel-title { margin-bottom: 16px; }
+    .sheet-handle-btn { display: none; }
+    .add-panel-toggle-hint { display: none; }
 
     .toast-container { bottom: 40px; }
   }

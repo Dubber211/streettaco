@@ -407,15 +407,45 @@ export function ToastContainer({ toasts }) {
 /* ─── Add Truck Panel (Waze-style) ──────────────────────────────────────────── */
 export function AddTruckPanel({ addMode, pendingPin, newTruckName, setNewTruckName, newTruckFood, setNewTruckFood, newTruckOpen, setNewTruckOpen, newTruckPermanent, setNewTruckPermanent, newTruckHours, setNewTruckHours, onSaveTruck, onCancelAddTruck, canAdd, addsRemaining, onUseMyLocation, savingTruck }) {
   const [showHours, setShowHours] = useState(false);
+  // Start collapsed so the map is visible for pin-dropping. Auto-expand once a pin lands.
+  const [collapsed, setCollapsed] = useState(true);
+  const userToggledRef = useRef(false);
+
+  useEffect(() => {
+    if (!addMode) {
+      setCollapsed(true);
+      userToggledRef.current = false;
+      return;
+    }
+    // Auto-expand the first time a pin is placed, unless the user has manually toggled.
+    if (pendingPin && !userToggledRef.current) setCollapsed(false);
+  }, [addMode, pendingPin]);
+
   if (!addMode) return null;
 
   const step1Done = Boolean(pendingPin);
   const step2Active = step1Done;
 
+  const toggleCollapsed = () => {
+    userToggledRef.current = true;
+    setCollapsed(c => !c);
+  };
+
   return (
-    <div className="add-panel-sheet">
-      <div className="sheet-handle"><div className="sheet-handle-bar" /></div>
-      <div className="add-panel-title">📍 Report a Truck</div>
+    <div className={`add-panel-sheet ${collapsed ? "collapsed" : ""}`}>
+      <button
+        type="button"
+        className="sheet-handle sheet-handle-btn"
+        onClick={toggleCollapsed}
+        aria-label={collapsed ? "Expand add truck panel" : "Collapse add truck panel"}
+        aria-expanded={!collapsed}
+      >
+        <div className="sheet-handle-bar" />
+      </button>
+      <div className="add-panel-title" onClick={toggleCollapsed} style={{ cursor: "pointer" }}>
+        <span>📍 Report a Truck</span>
+        <span className="add-panel-toggle-hint">{collapsed ? (step1Done ? "Tap to fill details ▲" : "Tap map to drop pin") : "▼"}</span>
+      </div>
 
       {/* Step Indicator */}
       <div className="add-steps">
