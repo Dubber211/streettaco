@@ -873,19 +873,24 @@
     transition: max-height 0.25s ease, padding 0.25s ease;
   }
 
-  /* Collapsed: show just the handle + title so the map is fully accessible
-     for dropping a pin. Tap the handle/title to expand. */
+  /* Collapsed: show handle + title + step 1 (the instruction) so the map
+     is mostly accessible for dropping a pin. Tap the handle/title to expand. */
   .add-panel-sheet.collapsed {
-    max-height: 104px;
-    padding-bottom: 14px;
+    max-height: 240px;
+    padding-bottom: 16px;
     overflow: hidden;
   }
   .add-panel-sheet.collapsed .add-panel-title {
-    margin-bottom: 0;
+    margin-bottom: 10px;
     font-size: 1.05rem;
     padding-top: 2px;
   }
   .add-panel-sheet.collapsed .add-panel-toggle-hint { font-size: 0.75rem; }
+  .add-panel-sheet.collapsed .add-steps { margin-bottom: 0; }
+  /* Hide steps 2+3 and the form body while collapsed — only step 1 matters
+     for pin placement. */
+  .add-panel-sheet.collapsed .step:nth-child(n+2) { display: none; }
+  .add-panel-sheet.collapsed .add-form { display: none; }
 
   :root[data-theme="light"] .add-panel-sheet {
     background: rgba(255, 255, 255, 0.95);
@@ -1655,6 +1660,9 @@
       overflow-y: auto;
     }
     .add-panel-sheet.collapsed .add-panel-title { margin-bottom: 16px; }
+    .add-panel-sheet.collapsed .add-steps { margin-bottom: 22px; }
+    .add-panel-sheet.collapsed .step:nth-child(n+2) { display: flex; }
+    .add-panel-sheet.collapsed .add-form { display: grid; }
     .sheet-handle-btn { display: none; }
     .add-panel-toggle-hint { display: none; }
 
