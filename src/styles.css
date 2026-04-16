@@ -876,11 +876,16 @@
   /* Collapsed: show just the handle + title so the map is fully accessible
      for dropping a pin. Tap the handle/title to expand. */
   .add-panel-sheet.collapsed {
-    max-height: 86px;
-    padding-bottom: 12px;
+    max-height: 104px;
+    padding-bottom: 14px;
     overflow: hidden;
   }
-  .add-panel-sheet.collapsed .add-panel-title { margin-bottom: 0; }
+  .add-panel-sheet.collapsed .add-panel-title {
+    margin-bottom: 0;
+    font-size: 1.05rem;
+    padding-top: 2px;
+  }
+  .add-panel-sheet.collapsed .add-panel-toggle-hint { font-size: 0.75rem; }
 
   :root[data-theme="light"] .add-panel-sheet {
     background: rgba(255, 255, 255, 0.95);

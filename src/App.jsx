@@ -446,8 +446,28 @@ function App() {
   }
 
   function resetForm() { setPendingPin(null); setNewTruckName(""); setNewTruckFood(""); setNewTruckOpen(true); setNewTruckPermanent(false); setNewTruckHours(""); }
-  function handleStartAddTruck() { setAddMode(true); resetForm(); showToast("Tap the map to drop a pin 📍"); }
-  function handleCancelAddTruck() { setAddMode(false); resetForm(); }
+  // Stash the map view so we can restore it if the user cancels add mode.
+  const preAddViewRef = useRef(null);
+  const ADD_TRUCK_RADIUS = 0.25;
+  function handleStartAddTruck() {
+    preAddViewRef.current = { center: mapCenter, radius: radiusMiles };
+    setAddMode(true);
+    resetForm();
+    // Center on the user if we have their location — most adds happen where they're standing.
+    if (userLocation) setMapCenter(userLocation);
+    setRadiusMiles(ADD_TRUCK_RADIUS);
+    showToast("Tap the map to drop a pin 📍");
+  }
+  function handleCancelAddTruck() {
+    setAddMode(false);
+    resetForm();
+    if (preAddViewRef.current) {
+      const { center, radius } = preAddViewRef.current;
+      setMapCenter(center);
+      setRadiusMiles(radius);
+      preAddViewRef.current = null;
+    }
+  }
   function handlePickLocation(pos) { setPendingPin(pos); showToast("Pin dropped! Fill in the details below."); }
   function handleUseLocationForPin() {
     if (!navigator.geolocation) { showToast("Geolocation not supported."); return; }
@@ -494,6 +514,7 @@ function App() {
     setMapCenter(pendingPin);
     setAddMode(false);
     resetForm();
+    preAddViewRef.current = null;
     setSavingTruck(false);
     showToast(`"${name}" submitted! It'll appear after admin review.`);
   }
@@ -801,7 +822,9 @@ function App() {
 
           <ProximityPrompt userLocation={userLocation} trucks={activeTrucks} onConfirm={handleConfirmStillHere} />
 
-          <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} />
+          {!addMode && (
+            <TruckList visibleTrucks={visibleTrucks} userVotes={userVotes} onVote={handleVote} onConfirmStillHere={handleConfirmStillHere} onReportClosed={handleReportClosed} myTruckIds={myTruckIds} onDeleteTruck={handleDeleteTruck} onEditTruck={handleEditTruck} onFocusTruck={id => setFocusRequest(r => ({ id, seq: (r?.seq ?? 0) + 1 }))} userId={userId} onShareTruck={handleShareTruck} favorites={favorites} onToggleFavorite={handleToggleFavorite} isAdmin={isAdmin} onAdminHideComment={handleAdminHideComment} onAdminDeleteComment={handleAdminDeleteComment} onFindNearest={handleFindNearest} onStartAddTruck={handleStartAddTruck} canAdd={canAdd} />
+          )}
         </div>
       )}
     </>

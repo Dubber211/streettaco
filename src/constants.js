@@ -2,7 +2,7 @@ export const DEFAULT_CENTER = [41.6764, -86.252];
 export const DEFAULT_RADIUS_MILES = 0.5;
 export const MOBILE_TRUCK_EXPIRATION_HOURS = 48;
 export const MAX_TRUCKS_PER_DAY = 5;
-export const RADIUS_OPTIONS = [0.5, 1, 3, 5, 10, 25];
+export const RADIUS_OPTIONS = [0.25, 0.5, 1, 3, 5, 10, 25];
 
 export const STORAGE_KEYS = {
   trucks: "street-taco-trucks",
